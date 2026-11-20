@@ -136,6 +136,33 @@ Consume the library with `add_subdirectory(ViGEmBus)` and link `vigem::vigem`, o
 | 32 | Touch packet count, always 1 |
 | 33-41 | Touch packet; the panel is 1920 × 943 with addressable maxima 1919 / 942 |
 
+### Building, testing and packaging
+
+```sh
+cmake -S . -B out -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build out
+ctest --test-dir out --output-on-failure
+cmake --install out --prefix dist/libvigem-1.0.0
+cmake --build out --target package      # portable archive via CPack
+```
+
+Three checks run under CTest:
+
+| Target | What it covers |
+| --- | --- |
+| `vigem_api_smoke` | report packing for both profiles, error paths, logging, mapping and the adapter |
+| `vigem_sunshine_host` | the call sequence a Sunshine-style host performs, built as C++23 |
+| `vigem_stress` | submissions racing a close and feedback dispatch on four threads |
+
+Set `VIGEM_REQUIRE_DRIVER=1` before running `vigem_sunshine_host` to make a machine without the
+bus driver fail instead of skipping the live pass.
+
+### Versioning
+
+`vigem::Runtime::version()` reports the library version, and the CMake package and CPack archive
+carry the same number. Headers keep a stable layout within a minor series, behaviour is additive
+across minor releases, and incompatibilities only arrive with a major bump.
+
 Scope: the driver still publishes exactly two personalities. Profiles for DualSense, Switch Pro,
 Xbox One/Series, generic HID, keyboard, mouse, or pen devices are not offered because the driver cannot
 create them; adding those requires driver work rather than client code.
