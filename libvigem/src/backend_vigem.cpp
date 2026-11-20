@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file libvigem/src/backend_vigem.cpp
  * @brief ViGEmBus driver backend that loads the client library at runtime.
@@ -8,8 +10,6 @@
  * instead of a load failure.
  */
 #include "detail.hpp"
-
-#if defined(_WIN32)
 
 // standard includes
 #include <cstdio>
@@ -111,6 +111,7 @@ namespace vigem::detail {
       void (*vigem_target_free)(void *target) = nullptr;
       std::uint32_t (*vigem_target_add)(void *client, void *target) = nullptr;
       std::uint32_t (*vigem_target_remove)(void *client, void *target) = nullptr;
+      bool (*vigem_target_is_attached)(void *target) = nullptr;
       std::uint32_t (*vigem_target_x360_update)(void *client, void *target, XusbReport report) = nullptr;
       std::uint32_t (*vigem_target_ds4_update_ex)(void *client, void *target, Ds4ReportEx report) = nullptr;
       std::uint32_t (*vigem_target_x360_register_notification)(void *client, void *target,
@@ -127,7 +128,7 @@ namespace vigem::detail {
                                                                     Ds4OutputBuffer *buffer) = nullptr;
 
       bool resolve() {
-// The intermediate void pointer keeps function-pointer casts warning-free on
+    // The intermediate void pointer keeps function-pointer casts warning-free on
     // compilers that diagnose direct function type changes.
 #define VIGEM_RESOLVE(member)                                                          \
   this->member = reinterpret_cast<decltype(this->member)>(                              \
@@ -162,6 +163,8 @@ namespace vigem::detail {
         vigem_target_ds4_await_output_report_timeout =
             reinterpret_cast<decltype(vigem_target_ds4_await_output_report_timeout)>(
                 reinterpret_cast<void *>(GetProcAddress(module, "vigem_target_ds4_await_output_report_timeout")));
+        vigem_target_is_attached = reinterpret_cast<decltype(vigem_target_is_attached)>(
+            reinterpret_cast<void *>(GetProcAddress(module, "vigem_target_is_attached")));
 
         return true;
       }
@@ -203,7 +206,9 @@ namespace vigem::detail {
       auto failure = [operation, error](ErrorCode code) {
         char message[160] {};
         std::snprintf(message, sizeof(message), "%s failed (ViGEm error 0x%08X)", operation, error);
-        return OperationStatus::failure(code, message);
+        // Keep the raw driver code so callers can tell a restarted bus service from a full
+        // slot table without parsing the message.
+        return OperationStatus::failure(code, message, error);
       };
 
       switch (error) {
@@ -220,7 +225,7 @@ namespace vigem::detail {
         case kVigemErrorXusbUserIndexOutOfRange:
           return failure(ErrorCode::invalid_argument);
         case kVigemErrorTargetNotPluggedIn:
-          return failure(ErrorCode::device_closed);
+          return failure(ErrorCode::device_detached);
         case kVigemErrorNotSupported:
         case kVigemErrorTimedOut:
           return failure(ErrorCode::not_supported);
@@ -398,12 +403,51 @@ namespace vigem::detail {
       }
 
     private:
+      bool attached() const override {
+        std::lock_guard<std::mutex> lock(target_mutex_);
+        if (!attached_ || target_ == nullptr) {
+          return false;
+        }
+
+        if (api_->vigem_target_is_attached == nullptr) {
+          return true;
+        }
+
+        return api_->vigem_target_is_attached(target_) != FALSE;
+      }
+
+      OperationStatus on_reattach() override {
+        std::lock_guard<std::mutex> lock(target_mutex_);
+        if (target_ == nullptr) {
+          return OperationStatus::failure(ErrorCode::device_closed, "gamepad target is not allocated");
+        }
+
+        auto status = map_error(api_->vigem_target_add(client_, target_), "target re-add");
+
+        // A restarted bus service invalidates the client connection as well, so reconnect
+        // once and retry before reporting the device as lost.
+        if (status.code() == ErrorCode::backend_unavailable && api_->vigem_disconnect != nullptr) {
+          api_->vigem_disconnect(client_);
+          if (map_error(api_->vigem_connect(client_), "reconnect").ok()) {
+            status = map_error(api_->vigem_target_add(client_, target_), "target re-add");
+          }
+        }
+
+        if (!status.ok()) {
+          return status;
+        }
+
+        attached_ = true;
+        log(LogLevel::info, "gamepad re-attached to the driver");
+        return OperationStatus::success();
+      }
+
       OperationStatus on_submit(const GamepadState & /*state*/, const std::vector<std::uint8_t> &packed) override {
         // Serialized against close(): a submit that raced a close must not call into
         // the driver with a target that is being freed.
         std::lock_guard<std::mutex> lock(target_mutex_);
         if (target_ == nullptr || !attached_) {
-          return OperationStatus::failure(ErrorCode::device_closed, "gamepad target is not attached");
+          return OperationStatus::failure(ErrorCode::device_detached, "gamepad target is not attached");
         }
 
         if (profile().kind == GamepadProfileKind::xbox_360) {
@@ -592,5 +636,3 @@ namespace vigem::detail {
   }
 
 }  // namespace vigem::detail
-
-#endif  // _WIN32

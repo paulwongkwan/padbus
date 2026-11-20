@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file libvigem/include/vigem/gamepad_adapter.hpp
  * @brief Profile-neutral gamepad adapter helpers.
@@ -11,6 +13,7 @@
 #include <optional>
 
 // local includes
+#include <vigem/mapping.hpp>
 #include <vigem/runtime.hpp>
 #include <vigem/types.hpp>
 
@@ -171,9 +174,26 @@ namespace vigem {
     /**
      * @brief Get the cached full gamepad state.
      *
+     * The cached state is the one read from the physical controller; any mapping is applied
+     * on submission, so callers never see shaped values here.
+     *
      * @return Cached gamepad state.
      */
     const GamepadState &state() const;
+
+    /**
+     * @brief Install an input mapping applied to every submission.
+     *
+     * @param mapping Mapping to apply, or `std::nullopt` to submit the cached state as is.
+     */
+    void set_mapping(std::optional<GamepadMapping> mapping);
+
+    /**
+     * @brief Get the installed input mapping.
+     *
+     * @return Installed mapping, or `std::nullopt` when submissions are unmapped.
+     */
+    const std::optional<GamepadMapping> &mapping() const;
 
     /**
      * @brief Check whether the owned gamepad is open.
@@ -313,6 +333,7 @@ namespace vigem {
     std::unique_ptr<Gamepad> gamepad_;
     GamepadState state_;
     GamepadProfileSupport support_;
+    std::optional<GamepadMapping> mapping_;
   };
 
   /**

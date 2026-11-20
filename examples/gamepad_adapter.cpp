@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file examples/gamepad_adapter.cpp
  * @brief Create a virtual gamepad, forward client input, and print feedback.

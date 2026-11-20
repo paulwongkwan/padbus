@@ -368,3 +368,4 @@ FodyWeavers.xsd
 /setup/ViGEmBus.back.aip
 /sdk
 *.aip
+dist/

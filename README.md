@@ -86,6 +86,55 @@ Features adopted from `libvirtualhid`:
   API validation.
 - **Full DualShock 4 reports** — touch contacts, gyroscope, and accelerometer samples are packed into the
   full `DS4_REPORT_EX` report, and raw output reports are available through `Gamepad::poll_raw_output()`.
+- **Driver-accurate DualShock 4 details** — the report timestamp advances in the driver's 5.333 µs units
+  (hosts such as Sunshine repeat reports specifically to keep it moving), and `GamepadState::battery`
+  publishes charge and cable state in both battery bytes ViGEm exposes.
+- **Attachment queries** — `Gamepad::is_attached()` reports whether the driver still holds the target, so a
+  bus restart is detectable instead of surfacing as an endless run of failed submits.
+- **Input mapping** — `vigem::GamepadMapping` shapes a physical controller's state before submission: radial
+  or per-axis deadzone, centre offset for sticks that rest off-centre, anti-deadzone floor, saturation,
+  response curve, axis inversion, trigger zones, stick-to-D-pad synthesis, and button redirection or
+  suppression, matching what DS4Windows and x360ce expose per axis. `vigem::serialize()` and
+  `vigem::deserialize()` store a mapping as stable `key=value` text for per-controller profile files.
+- **Recovery and duplicate suppression** — `Gamepad::reattach()` revives a device the driver dropped (a bus
+  restart invalidates both the target and the client connection), and `set_submit_on_change()` drops frames
+  that repeat the previous report while a keepalive flush keeps the device from going stale. Failures carry
+  the raw `VIGEM_ERROR` value through `OperationStatus::native_code()`.
+
+### Migrating from the ViGEmClient C API
+
+| ViGEmClient | libvigem |
+| --- | --- |
+| `vigem_alloc` + `vigem_connect` | `vigem::Runtime::create()` |
+| `vigem_target_x360_alloc` / `_ds4_alloc` + `vigem_target_add` | `Runtime::create_gamepad(vigem::profiles::xbox_360())` / `dualshock4()` |
+| `vigem_target_x360_update` / `vigem_target_ds4_update_ex` | `Gamepad::submit(vigem::GamepadState{…})` |
+| `vigem_target_is_attached` | `Gamepad::is_attached()`, then `Gamepad::reattach()` |
+| `vigem_target_remove` + `vigem_target_free` | `Gamepad::close()`, or handle destruction |
+| `vigem_target_x360_register_notification` / `_ds4_` | `Gamepad::set_output_callback(…)` |
+| `vigem_target_ds4_await_output_report_timeout` | `Gamepad::poll_raw_output(timeout_ms)` |
+| `vigem_target_x360_get_user_index` | `Gamepad::xinput_user_index()` |
+| `vigem_disconnect` + `vigem_free` | runtime destruction |
+
+Consume the library with `add_subdirectory(ViGEmBus)` and link `vigem::vigem`, or install it and use
+`find_package(vigem REQUIRED)`. The headers are C++17 and compile unchanged as C++23.
+
+### DualShock 4 report layout
+
+`Gamepad::last_input_report()` returns the 63-byte report body, so struct offset *N* is hardware byte *N*+1:
+
+| Offset | Content |
+| --- | --- |
+| 0-3 | Sticks: 0 is left/top, 255 is right/bottom, so vertical axes are inverted against the normalized positive-is-up model |
+| 4-5 | Button word, little endian; low nibble carries the direction pad |
+| 6 | Special buttons (PS, touchpad click) |
+| 7-8 | Trigger values in `0-255`; the digital trigger bits live in the button word |
+| 9-10 | Timestamp in 5.333 µs units, advanced on every submission |
+| 11 | Battery level byte (`percent * 255 / 100`) |
+| 12-17 | Gyroscope, 1024 units per 64 °/s |
+| 18-23 | Accelerometer, 8192 units per g |
+| 29 | Battery status: low nibble in 10 % steps, bit 4 set when a cable is connected |
+| 32 | Touch packet count, always 1 |
+| 33-41 | Touch packet; the panel is 1920 × 943 with addressable maxima 1919 / 942 |
 
 Scope: the driver still publishes exactly two personalities. Profiles for DualSense, Switch Pro,
 Xbox One/Series, generic HID, keyboard, mouse, or pen devices are not offered because the driver cannot
@@ -120,7 +169,7 @@ The ViGEm Bus Driver is licensed under the **BSD-3-Clause**, see [LICENSE](./LIC
 
 You can build directly within Visual Studio.
 
-The modern C++ client API in `libvigem/` only needs a C++17 compiler:
+The modern C++ client API in `libvigem/` targets **Windows 11** and needs a C++17 compiler:
 
 ```sh
 cmake -S . -B out -DVIGEM_BUILD_TESTS=ON

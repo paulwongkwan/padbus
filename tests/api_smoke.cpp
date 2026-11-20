@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file tests/api_smoke.cpp
  * @brief Behavioural checks for the modern ViGEm client API.
@@ -8,11 +10,13 @@
 #include <vigem/vigem.hpp>
 
 // standard includes
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -239,8 +243,39 @@ namespace {
     check_eq(vertical_report[1], 0, "dualshock 4 up is zero");
     check_eq(vertical_report[3], 255, "dualshock 4 down is 255");
 
+    // The report timestamp advances in 5.333 us units, which applications that require
+    // a moving DualShock 4 timestamp depend on.
+    vigem::GamepadState repeated;
+    check(gamepad.submit(repeated).ok(), "repeated submit succeeds");
+    const auto first_report = gamepad.last_input_report();
+    const auto first_timestamp = static_cast<std::uint16_t>(first_report[9] | (first_report[10] << 8));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    check(gamepad.submit(repeated).ok(), "second repeated submit succeeds");
+    const auto later_report = gamepad.last_input_report();
+    const auto second_timestamp = static_cast<std::uint16_t>(later_report[9] | (later_report[10] << 8));
+    check(second_timestamp != first_timestamp, "dualshock 4 timestamp advances between reports");
+
+    // Declared battery state is published in both bytes the driver exposes.
+    vigem::GamepadState half_charge;
+    half_charge.battery = vigem::GamepadBattery {50, true};
+    check(gamepad.submit(half_charge).ok(), "battery submit succeeds");
+    const auto half_report = gamepad.last_input_report();
+    check_eq(half_report[29], 0x15, "half charge on cable sets the status nibble");
+    check_eq(half_report[11], 127, "battery level byte carries the percentage");
+
+    vigem::GamepadState full_charge;
+    full_charge.battery = vigem::GamepadBattery {100, false};
+    check(gamepad.submit(full_charge).ok(), "full battery submit succeeds");
+    const auto full_report = gamepad.last_input_report();
+    check_eq(full_report[29], 0x0A, "full battery clears the cable bit");
+    check_eq(full_report[11], 255, "full battery level byte");
+
+    check(gamepad.is_attached(), "fake device reports itself attached");
     check(!gamepad.poll_raw_output(0).has_value(), "fake backend publishes no raw reports");
     check(gamepad.xinput_user_index() == -1, "dualshock 4 has no xinput index");
+
+    check(gamepad.close().ok(), "dualshock 4 gamepad closes");
+    check(!gamepad.is_attached(), "closed device is no longer attached");
   }
 
   void test_output_dispatch() {
@@ -368,11 +403,7 @@ namespace {
     // backend_unavailable with a reason instead of failing device creation obscurely.
     vigem::RuntimeOptions options;
     options.backend = vigem::BackendKind::platform_default;
-#if defined(_WIN32)
     options.client_library_path = "Z:\\vigem-missing\\ViGEmClient.dll";
-#else
-    options.client_library_path = "/nonexistent/ViGEmClient.so";
-#endif
 
     auto runtime = vigem::Runtime::create(options);
     check(runtime != nullptr, "runtime with an explicit client path is created");
@@ -383,6 +414,192 @@ namespace {
     check_eq(static_cast<int>(created.status.code()), static_cast<int>(vigem::ErrorCode::backend_unavailable),
              "bogus client library path reports backend_unavailable");
     check(!created.status.message().empty(), "bogus client library path reports a reason");
+  }
+
+  void test_input_mapping() {
+    vigem::GamepadMapping mapping;
+
+    // Drift inside the deadzone is reported as centered, and leaving it starts on the
+    // anti-deadzone floor instead of zero, the way DS4Windows exposes the two zones.
+    mapping.left_stick.deadzone = 0.2F;
+    mapping.left_stick.anti_deadzone = 0.4F;
+
+    vigem::GamepadState drifting;
+    drifting.left_stick = {0.1F, 0.1F};
+    check(mapping.apply(drifting).left_stick.x == 0.0F, "stick drift inside the deadzone is centered");
+
+    vigem::GamepadState edge;
+    edge.left_stick = {0.21F, 0.0F};
+    const auto near_edge = mapping.apply(edge).left_stick;
+    check(near_edge.x > 0.39F && near_edge.x < 0.42F, "anti-deadzone lifts the first movement off zero");
+
+    vigem::GamepadState full;
+    full.left_stick = {1.0F, 0.0F};
+    check(mapping.apply(full).left_stick.x > 0.99F, "full deflection stays at full output");
+
+    // Saturation, response curve and inversion shape the remaining travel.
+    vigem::GamepadMapping early;
+    early.left_stick.saturation = 0.5F;
+    vigem::GamepadState half;
+    half.left_stick = {0.5F, 0.0F};
+    check(early.apply(half).left_stick.x > 0.99F, "saturation reaches full output early");
+
+    vigem::GamepadMapping curved;
+    curved.right_stick.exponent = 2.0F;
+    vigem::GamepadState half_up;
+    half_up.right_stick = {0.0F, 0.5F};
+    half_up.left_stick = {0.0F, 0.5F};
+    const auto curved_y = curved.apply(half_up).right_stick.y;
+    check(curved_y > 0.24F && curved_y < 0.26F, "response curve squares the travel");
+
+    vigem::GamepadMapping inverted;
+    inverted.left_stick.invert_y = true;
+    check(inverted.apply(half_up).left_stick.y < -0.49F, "inverted vertical axis points down");
+
+    // Triggers get their own deadzone and saturation.
+    vigem::GamepadMapping triggers;
+    triggers.left_trigger.deadzone = 0.3F;
+    vigem::GamepadState resting;
+    resting.left_trigger = 0.2F;
+    check(triggers.apply(resting).left_trigger == 0.0F, "trigger inside the deadzone reads zero");
+
+    vigem::GamepadState pressed;
+    pressed.left_trigger = 0.65F;
+    const auto shaped_trigger = triggers.apply(pressed).left_trigger;
+    check(shaped_trigger > 0.49F && shaped_trigger < 0.51F, "trigger deadzone rescales the travel");
+
+    // A stick can drive the directional pad, and stop being visible to the game.
+    vigem::GamepadMapping dpad;
+    dpad.dpad_from_left_stick.enabled = true;
+    dpad.dpad_from_left_stick.threshold = 0.6F;
+    dpad.dpad_from_left_stick.suppress_stick = true;
+
+    vigem::GamepadState corner;
+    corner.left_stick = {0.8F, -0.7F};
+    const auto synthesized = dpad.apply(corner);
+    check(synthesized.buttons.test(vigem::GamepadButton::dpad_right), "stick presses the right direction");
+    check(synthesized.buttons.test(vigem::GamepadButton::dpad_down), "stick presses the down direction");
+    check(!synthesized.buttons.test(vigem::GamepadButton::dpad_up), "opposite direction stays released");
+    check(synthesized.left_stick.x == 0.0F, "suppressing the stick keeps the game from seeing it");
+
+    // Buttons can be redirected or suppressed, as DS4Windows and x360ce allow.
+    vigem::GamepadMapping remap;
+    remap.buttons.push_back({vigem::GamepadButton::a, vigem::GamepadButton::b, true});
+    remap.buttons.push_back({vigem::GamepadButton::x, vigem::GamepadButton::x, false});
+
+    vigem::GamepadState physical;
+    physical.buttons.set(vigem::GamepadButton::a, true);
+    physical.buttons.set(vigem::GamepadButton::x, true);
+    const auto remapped = remap.apply(physical);
+    check(remapped.buttons.test(vigem::GamepadButton::b), "mapped button is pressed on the emulated pad");
+    check(!remapped.buttons.test(vigem::GamepadButton::a), "source button is released after the remap");
+    check(!remapped.buttons.test(vigem::GamepadButton::x), "disabled button is suppressed");
+
+    // Everything the mapping does not touch is forwarded unchanged.
+    vigem::GamepadState extras;
+    extras.battery = vigem::GamepadBattery {42, true};
+    extras.gyroscope = vigem::Vector3 {1.0F, 2.0F, 3.0F};
+    extras.touchpad_contacts[0].active = true;
+    extras.touchpad_contacts[0].x = 0.25F;
+    const auto preserved = mapping.apply(extras);
+    check(preserved.battery.has_value(), "battery state survives mapping");
+    check(preserved.gyroscope.has_value(), "motion state survives mapping");
+    check(preserved.touchpad_contacts[0].active, "touch state survives mapping");
+  }
+
+  void test_device_recovery_and_dedup() {
+    auto runtime = vigem::Runtime::create(fake_options());
+    auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+    if (!created) {
+      check(false, "recovery device is created");
+      return;
+    }
+
+    auto &gamepad = *created.gamepad;
+    check(gamepad.is_attached(), "the fake device reports itself attached");
+    check(gamepad.reattach().ok(), "reattaching an attached device succeeds without work");
+
+    // Duplicate frames are dropped, but a keepalive flush still reaches the device.
+    gamepad.set_submit_on_change(true, 50);
+    vigem::GamepadState state;
+    state.buttons.set(vigem::GamepadButton::a, true);
+    check(gamepad.submit(state).ok(), "the first frame submits");
+    const auto after_first = gamepad.submit_count();
+    check(gamepad.submit(state).ok(), "a duplicate frame reports success");
+    check_eq(gamepad.submit_count(), after_first, "a duplicate frame is suppressed");
+
+    state.left_stick = {0.5F, 0.0F};
+    check(gamepad.submit(state).ok(), "a changed frame submits");
+    check(gamepad.submit_count() > after_first, "a changed frame reaches the device");
+    const auto after_change = gamepad.submit_count();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    check(gamepad.submit(state).ok(), "the keepalive frame submits");
+    check(gamepad.submit_count() > after_change, "the keepalive flush reaches the device");
+    gamepad.set_submit_on_change(false);
+
+    check(gamepad.close().ok(), "the device closes");
+    check(gamepad.submit(state).code() == vigem::ErrorCode::device_closed,
+          "a submit after close reports device_closed");
+    check(gamepad.reattach().code() == vigem::ErrorCode::device_closed,
+          "reattaching a closed device reports device_closed");
+    check(!gamepad.is_attached(), "a closed device reports itself detached");
+  }
+
+  void test_mapping_persistence() {
+    vigem::GamepadMapping mapping;
+    mapping.left_stick.deadzone = 0.25F;
+    mapping.left_stick.center_x = 0.05F;
+    mapping.left_stick.per_axis_deadzone = true;
+    mapping.right_stick.exponent = 1.5F;
+    mapping.left_trigger.deadzone = 0.3F;
+    mapping.dpad_from_left_stick.enabled = true;
+    mapping.dpad_from_left_stick.threshold = 0.7F;
+    mapping.dpad_from_left_stick.suppress_stick = true;
+    mapping.buttons.push_back({vigem::GamepadButton::a, vigem::GamepadButton::b, true});
+    mapping.buttons.push_back({vigem::GamepadButton::x, vigem::GamepadButton::x, false});
+
+    const auto text = vigem::serialize(mapping);
+    std::string error;
+    const auto parsed = vigem::deserialize(text, &error);
+    check(parsed.has_value(), "a serialized mapping parses back");
+    if (parsed) {
+      check(std::fabs(parsed->left_stick.deadzone - 0.25F) < 1e-5F, "the deadzone round-trips");
+      check(std::fabs(parsed->left_stick.center_x - 0.05F) < 1e-5F, "the centre offset round-trips");
+      check(std::fabs(parsed->right_stick.exponent - 1.5F) < 1e-5F, "the response curve round-trips");
+      check(parsed->left_stick.per_axis_deadzone, "the per-axis flag round-trips");
+      check(parsed->dpad_from_left_stick.enabled, "the dpad flag round-trips");
+      check(parsed->dpad_from_left_stick.suppress_stick, "the dpad suppression round-trips");
+      check_eq(parsed->buttons.size(), 2, "button entries round-trip");
+      if (parsed->buttons.size() == 2) {
+        check(parsed->buttons[0].source == vigem::GamepadButton::a &&
+                  parsed->buttons[0].target == vigem::GamepadButton::b,
+              "a button redirect round-trips");
+        check(!parsed->buttons[1].enabled, "a button suppression round-trips");
+      }
+    }
+
+    check(!vigem::deserialize("not a mapping").has_value(), "invalid mapping text is rejected");
+
+    // The adapter applies an installed mapping before packing.
+    auto runtime = vigem::Runtime::create(fake_options());
+    auto adapter = vigem::GamepadStateAdapter::create(*runtime, vigem::profiles::xbox_360());
+    if (!adapter) {
+      check(false, "the adapter is created");
+      return;
+    }
+
+    vigem::GamepadMapping invert;
+    invert.left_stick.invert_y = true;
+    adapter.adapter->set_mapping(invert);
+    check(adapter.adapter->mapping().has_value(), "the adapter stores the mapping");
+    check(adapter.adapter->set_left_stick({0.0F, 1.0F}).ok(), "the mapped adapter submits");
+
+    const auto report = adapter.adapter->gamepad()->last_input_report();
+    if (report.size() == 12) {
+      const auto raw = static_cast<std::int16_t>(report[6] | (report[7] << 8));
+      check(raw < 0, "the adapter applied the inversion before packing");
+    }
   }
 
   void test_status_and_logging() {
@@ -422,6 +639,9 @@ int main() {
   test_dualshock4_report_packing();
   test_output_dispatch();
   test_adapter_incremental_updates();
+  test_input_mapping();
+  test_device_recovery_and_dedup();
+  test_mapping_persistence();
   test_runtime_lifecycle();
   test_platform_backend_reporting();
   test_platform_library_override();

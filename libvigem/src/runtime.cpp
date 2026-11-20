@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file libvigem/src/runtime.cpp
  * @brief Runtime, device handles, the in-memory backend, and report packing.
@@ -281,7 +283,7 @@ namespace vigem::detail {
 
   }  // namespace
 
-  PackedReport pack_report(const GamepadState &state, GamepadProfileKind kind) {
+  PackedReport pack_report(const GamepadState &state, GamepadProfileKind kind, std::uint16_t ds4_timestamp) {
     PackedReport packed;
 
     if (kind == GamepadProfileKind::xbox_360) {
@@ -313,10 +315,20 @@ namespace vigem::detail {
     bytes[6] = ds4_special(state.buttons);
     bytes[7] = to_trigger_byte(state.left_trigger);
     bytes[8] = to_trigger_byte(state.right_trigger);
-    // bytes[9..10] hold the report timestamp and stay zero.
+    // The timestamp advances in 5.333 us units, which is what applications that
+    // demand a moving DualShock 4 timestamp read.
+    write_le16(bytes + 9, ds4_timestamp);
+    // bytes[24..28] are reserved; byte 11 and byte 29 carry battery state.
     bytes[11] = kDs4TemperatureByte;
-    // bytes[24..28] are reserved and byte 29 carries the wired/full battery status.
     bytes[29] = kDs4StatusWiredFull;
+    if (state.battery) {
+      const auto percent = static_cast<std::uint8_t>(std::min<std::uint8_t>(state.battery->percent_remaining, 100));
+      // The low nibble carries the charge in 10% steps (10 == full) and bit 4 flags a
+      // connected cable. Both battery bytes ViGEm exposes are filled in, exactly as
+      // DS4Windows and Sunshine publish them, so either one is usable by consumers.
+      bytes[29] = static_cast<std::uint8_t>(((percent + 5u) / 10u) | (state.battery->charging ? 0x10u : 0x00u));
+      bytes[11] = static_cast<std::uint8_t>(percent * 255u / 100u);
+    }
 
     if (state.acceleration) {
       write_le16s(bytes + 18, to_sensor_axis(state.acceleration->x));
@@ -386,6 +398,35 @@ namespace vigem::detail {
     return open_;
   }
 
+  bool GamepadImpl::is_attached() const {
+    if (!is_open()) {
+      return false;
+    }
+
+    return attached();
+  }
+
+  bool GamepadImpl::attached() const {
+    return is_open();
+  }
+
+  std::uint16_t GamepadImpl::advance_ds4_timestamp() {
+    if (profile_.kind != GamepadProfileKind::dualshock4) {
+      return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_timestamp_ts_);
+    if (elapsed.count() > 0) {
+      // The 16-bit DualShock 4 timestamp counts 5.333 us units.
+      ds4_timestamp_ = static_cast<std::uint16_t>(ds4_timestamp_ + static_cast<std::uint64_t>(elapsed.count()) / 5333u);
+      last_timestamp_ts_ = now;
+    }
+
+    return ds4_timestamp_;
+  }
+
   OperationStatus GamepadImpl::close() {
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -403,12 +444,67 @@ namespace vigem::detail {
     return status;
   }
 
+  OperationStatus GamepadImpl::reattach() {
+    if (!is_open()) {
+      return OperationStatus::failure(ErrorCode::device_closed, "gamepad is closed");
+    }
+
+    if (attached()) {
+      return OperationStatus::success();
+    }
+
+    return on_reattach();
+  }
+
+  OperationStatus GamepadImpl::on_reattach() {
+    return attached() ? OperationStatus::success()
+                      : OperationStatus::failure(ErrorCode::device_detached, "backend cannot re-attach the device");
+  }
+
+  bool GamepadImpl::should_submit(const std::vector<std::uint8_t> &packed) const {
+    if (!submit_on_change_) {
+      return true;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (last_report_.size() != packed.size()) {
+      return true;
+    }
+
+    // The DualShock 4 timestamp advances on every report, so it must not make two identical
+    // frames look different.
+    const bool skip_timestamp = profile_.kind == GamepadProfileKind::dualshock4 && packed.size() > 10;
+    for (std::size_t index = 0; index < packed.size(); ++index) {
+      if (skip_timestamp && (index == 9 || index == 10)) {
+        continue;
+      }
+
+      if (packed[index] != last_report_[index]) {
+        return true;
+      }
+    }
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - last_submit_ts_);
+    return elapsed.count() >= static_cast<decltype(elapsed.count())>(keepalive_ms_);
+  }
+
+  void GamepadImpl::set_submit_on_change(bool enabled, std::uint32_t keepalive_ms) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    submit_on_change_ = enabled;
+    keepalive_ms_ = keepalive_ms;
+  }
+
   OperationStatus GamepadImpl::submit(const GamepadState &state) {
     if (!is_open()) {
       return OperationStatus::failure(ErrorCode::device_closed, "gamepad is closed");
     }
 
-    auto packed = pack_report(state, profile_.kind);
+    auto packed = pack_report(state, profile_.kind, advance_ds4_timestamp());
+
+    if (!should_submit(packed.bytes)) {
+      return OperationStatus::success();
+    }
 
     auto status = on_submit(state, packed.bytes);
     if (!status.ok()) {
@@ -419,6 +515,7 @@ namespace vigem::detail {
       std::lock_guard<std::mutex> lock(mutex_);
       last_state_ = state;
       last_report_ = std::move(packed.bytes);
+      last_submit_ts_ = std::chrono::steady_clock::now();
       ++submit_count_;
     }
 
@@ -586,36 +683,7 @@ namespace vigem::detail {
       }
     };
 
-    /**
-     * @brief Backend that reports an unavailable platform stack.
-     */
-    class UnavailableBackend final: public Backend {
-    public:
-      UnavailableBackend(std::shared_ptr<LogSink> log, std::string reason): reason_(std::move(reason)) {
-        set_log(std::move(log));
-        BackendCapabilities capabilities;
-        capabilities.backend_name = "unavailable";
-        capabilities.available = false;
-        capabilities.supports_gamepad = false;
-        capabilities.requires_installed_driver = true;
-        set_capabilities(std::move(capabilities));
-      }
-
-      GamepadCreation create_gamepad(DeviceId /*id*/, const DeviceProfile & /*profile*/) override {
-        return {OperationStatus::failure(ErrorCode::backend_unavailable, reason_), nullptr};
-      }
-
-    private:
-      std::string reason_;
-    };
-
   }  // namespace
-
-#if !defined(_WIN32)
-  std::unique_ptr<Backend> make_platform_backend(const RuntimeOptions & /*options*/, std::shared_ptr<LogSink> log) {
-    return std::make_unique<UnavailableBackend>(std::move(log), "the ViGEmBus driver backend requires Windows");
-  }
-#endif
 
   RuntimeState::RuntimeState(RuntimeOptions options): kind_(options.backend) {
     auto log = std::make_shared<LogSink>(options.log_callback);
@@ -624,10 +692,6 @@ namespace vigem::detail {
       backend_ = std::make_unique<FakeBackend>(log);
     } else {
       backend_ = make_platform_backend(options, log);
-    }
-
-    if (!backend_) {
-      backend_ = std::make_unique<UnavailableBackend>(log, "no backend is available");
     }
 
     log->write(LogLevel::info, std::string("runtime ready: ") + backend_->capabilities().backend_name);
@@ -797,6 +861,28 @@ namespace vigem {
     return state_->create_gamepad(profile);
   }
 
+  bool Gamepad::is_attached() const {
+    return device_ != nullptr && device_->is_attached();
+  }
+
+  OperationStatus Gamepad::reattach() {
+    if (device_ == nullptr) {
+      return OperationStatus::failure(ErrorCode::device_closed, "gamepad handle owns no device");
+    }
+
+    return device_->reattach();
+  }
+
+  void Gamepad::set_submit_on_change(bool enabled, std::uint32_t keepalive_ms) {
+    if (device_ != nullptr) {
+      device_->set_submit_on_change(enabled, keepalive_ms);
+    }
+  }
+
+  const char *Runtime::version() {
+    return "1.0.0";
+  }
+
   std::size_t Runtime::active_device_count() const {
     return state_->active_device_count();
   }
@@ -810,13 +896,17 @@ namespace vigem {
                                                       : GamepadProfileSupport {}) {}
 
   GamepadStateAdapter::GamepadStateAdapter(GamepadStateAdapter &&other) noexcept:
-      gamepad_(std::move(other.gamepad_)), state_(other.state_), support_(other.support_) {}
+      gamepad_(std::move(other.gamepad_)),
+      state_(other.state_),
+      support_(other.support_),
+      mapping_(std::move(other.mapping_)) {}
 
   GamepadStateAdapter &GamepadStateAdapter::operator=(GamepadStateAdapter &&other) noexcept {
     if (this != &other) {
       gamepad_ = std::move(other.gamepad_);
       state_ = other.state_;
       support_ = other.support_;
+      mapping_ = std::move(other.mapping_);
     }
     return *this;
   }
@@ -855,6 +945,14 @@ namespace vigem {
     return state_;
   }
 
+  void GamepadStateAdapter::set_mapping(std::optional<GamepadMapping> mapping) {
+    mapping_ = std::move(mapping);
+  }
+
+  const std::optional<GamepadMapping> &GamepadStateAdapter::mapping() const {
+    return mapping_;
+  }
+
   bool GamepadStateAdapter::is_open() const {
     return gamepad_ && gamepad_->is_open();
   }
@@ -863,7 +961,12 @@ namespace vigem {
     if (!gamepad_) {
       return OperationStatus::failure(ErrorCode::device_closed, "adapter owns no gamepad");
     }
-    return gamepad_->submit(state_);
+
+    if (!mapping_) {
+      return gamepad_->submit(state_);
+    }
+
+    return gamepad_->submit(mapping_->apply(state_));
   }
 
   OperationStatus GamepadStateAdapter::set_state(const GamepadState &state) {

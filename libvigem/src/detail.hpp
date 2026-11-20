@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file libvigem/src/detail.hpp
  * @brief Internal interfaces shared by the ViGEm client backends.
@@ -6,6 +8,7 @@
 
 // standard includes
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -62,9 +65,10 @@ namespace vigem::detail {
    *
    * @param state Normalized gamepad state.
    * @param kind Target profile.
+   * @param ds4_timestamp DualShock 4 report timestamp in 5.333 us units.
    * @return Packed report bytes and their length.
    */
-  PackedReport pack_report(const GamepadState &state, GamepadProfileKind kind);
+  PackedReport pack_report(const GamepadState &state, GamepadProfileKind kind, std::uint16_t ds4_timestamp);
 
   /**
    * @brief Backend-independent bookkeeping for a single virtual gamepad.
@@ -117,6 +121,28 @@ namespace vigem::detail {
      * @return `true` when the device accepts operations.
      */
     bool is_open() const;
+
+    /**
+     * @brief Enable duplicate report suppression.
+     *
+     * @param enabled Whether duplicate reports are suppressed.
+     * @param keepalive_ms Longest interval without a submission, in milliseconds.
+     */
+    void set_submit_on_change(bool enabled, std::uint32_t keepalive_ms);
+
+    /**
+     * @brief Check whether the device is open and still attached to the backend.
+     *
+     * @return `true` when the device accepts operations and the backend reports it.
+     */
+    bool is_attached() const;
+
+    /**
+     * @brief Re-attach the device after the driver dropped it.
+     *
+     * @return Re-attach operation status.
+     */
+    OperationStatus reattach();
 
     /**
      * @brief Close the device once, running backend teardown on the first call.
@@ -186,6 +212,20 @@ namespace vigem::detail {
 
   protected:
     /**
+     * @brief Report whether the backend still has the device attached.
+     *
+     * @return `true` when the backend reports the device as attached.
+     */
+    virtual bool attached() const;
+
+    /**
+     * @brief Ask the backend to attach the device again after it was dropped.
+     *
+     * @return Re-attach operation status.
+     */
+    virtual OperationStatus on_reattach();
+
+    /**
      * @brief Publish a packed report to the device backend.
      *
      * @param state Normalized state that produced the report.
@@ -210,6 +250,21 @@ namespace vigem::detail {
     void log(LogLevel level, const std::string &message) const;
 
   private:
+    /**
+     * @brief Advance the DualShock 4 report timestamp for the next submission.
+     *
+     * @return Timestamp in DualShock 4 5.333 us units.
+     */
+    std::uint16_t advance_ds4_timestamp();
+
+    /**
+     * @brief Decide whether a packed report is worth sending to the backend.
+     *
+     * @param packed Packed report for the current state.
+     * @return `true` when the report differs from the previous one or the keepalive expired.
+     */
+    bool should_submit(const std::vector<std::uint8_t> &packed) const;
+
     DeviceId id_;
     DeviceProfile profile_;
     std::shared_ptr<LogSink> log_;
@@ -219,6 +274,13 @@ namespace vigem::detail {
     GamepadState last_state_;
     std::vector<std::uint8_t> last_report_;
     std::size_t submit_count_ = 0;
+
+    bool submit_on_change_ = false;
+    std::uint32_t keepalive_ms_ = 100;
+    std::chrono::steady_clock::time_point last_submit_ts_ {std::chrono::steady_clock::now()};
+
+    std::uint16_t ds4_timestamp_ = 0;
+    std::chrono::steady_clock::time_point last_timestamp_ts_ {std::chrono::steady_clock::now()};
 
     std::mutex callback_mutex_;
     OutputCallback callback_;
@@ -314,10 +376,11 @@ namespace vigem::detail {
   };
 
   /**
-   * @brief Create the platform backend selected by the runtime options.
+   * @brief Create the ViGEmBus driver backend selected by the runtime options.
    *
-   * Hosts without a driver-backed platform backend receive an unavailable
-   * backend that reports why device creation is impossible.
+   * The returned backend reports `available == false` with a reason when the
+   * client library or the bus driver is missing, so hosts can explain the
+   * failure instead of encountering a load error.
    *
    * @param options Runtime options.
    * @param log Diagnostic sink.

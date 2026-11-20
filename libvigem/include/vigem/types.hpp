@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file libvigem/include/vigem/types.hpp
  * @brief Core public types for the modern ViGEm client API.
@@ -34,6 +36,7 @@ namespace vigem {
     device_closed,  ///< Device operation was requested after the device closed.
     no_free_slot,  ///< Every emulated device slot provided by the driver is occupied.
     not_supported,  ///< The driver does not implement the requested operation.
+    device_detached,  ///< The driver no longer holds the target; call reattach().
     backend_failure,  ///< Backend-specific operation failed.
   };
 
@@ -100,16 +103,45 @@ namespace vigem {
      */
     const std::string &message() const;
 
+    /**
+     * @brief Check whether the status carries a native driver error code.
+     *
+     * @return `true` when a raw `VIGEM_ERROR` value was recorded.
+     */
+    bool has_native_code() const;
+
+    /**
+     * @brief Get the raw driver error code, when one was recorded.
+     *
+     * Callers use this to distinguish recoverable conditions the category alone cannot
+     * express, such as a restarted bus service from a full device slot table.
+     *
+     * @return Native `VIGEM_ERROR` value, or `0` when none was recorded.
+     */
+    std::uint32_t native_code() const;
+
+    /**
+     * @brief Create a failing status that records the raw driver error.
+     *
+     * @param code Error category.
+     * @param message Human-readable failure message.
+     * @param native_code Raw `VIGEM_ERROR` value.
+     * @return Failing status object.
+     */
+    static OperationStatus failure(ErrorCode code, std::string message, std::uint32_t native_code);
+
   private:
     ErrorCode code_;
     std::string message_;
+    std::uint32_t native_code_ = 0;
+    bool has_native_code_ = false;
   };
 
   /**
    * @brief Backend implementation selection.
    */
   enum class BackendKind {
-    platform_default,  ///< The ViGEmBus driver backend for the current platform.
+    platform_default,  ///< The ViGEmBus driver backend, which targets Windows 11.
     fake,  ///< In-memory backend for tests and API validation.
   };
 
@@ -157,8 +189,8 @@ namespace vigem {
     /**
      * @brief Optional explicit path to the ViGEm client library.
      *
-     * An empty value uses the platform library search order. On Windows this is
-     * `ViGEmClient.dll`, resolved from the application directory first.
+     * An empty value uses the standard Windows library search order and resolves
+     * `ViGEmClient.dll` from the application directory first.
      */
     std::string client_library_path;
   };
@@ -403,6 +435,21 @@ namespace vigem {
   };
 
   /**
+   * @brief Battery state of a virtual gamepad.
+   */
+  struct GamepadBattery {
+    /**
+     * @brief Remaining charge as a percentage in the inclusive range `[0, 100]`.
+     */
+    std::uint8_t percent_remaining = 100;
+
+    /**
+     * @brief Whether the device reports itself as connected to power.
+     */
+    bool charging = false;
+  };
+
+  /**
    * @brief Common gamepad input state accepted by the ViGEm client API.
    *
    * Values are normalized so consumers can forward client input without
@@ -435,11 +482,21 @@ namespace vigem {
     float right_trigger = 0.0F;
 
     /**
+     * @brief Battery state to publish, when available.
+     *
+     * Profiles that report battery status encode it, and profiles without a battery
+     * ignore it. Leaving this unset keeps the wired, fully charged default that the
+     * driver itself publishes.
+     */
+    std::optional<GamepadBattery> battery;
+
+    /**
      * @brief Accelerometer data in raw DualShock 4 units, when available.
      *
      * Values are forwarded verbatim into the emulated device report, so they use
-     * the DualShock 4 sensor scale rather than SI units. Profiles without motion
-     * sensors ignore this field.
+     * the DualShock 4 sensor scale rather than SI units: one gravity is 8192 units,
+     * that is `m / s^2 / 9.80665 * 8192`. Profiles without motion sensors ignore
+     * this field.
      */
     std::optional<Vector3> acceleration;
 

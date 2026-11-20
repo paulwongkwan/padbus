@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file libvigem/src/types.cpp
  * @brief Core public type implementations for the modern ViGEm client API.
@@ -33,6 +35,8 @@ namespace vigem {
         return "no_free_slot";
       case ErrorCode::not_supported:
         return "not_supported";
+      case ErrorCode::device_detached:
+        return "device_detached";
       case ErrorCode::backend_failure:
         return "backend_failure";
     }
@@ -102,6 +106,21 @@ namespace vigem {
 
   std::uint32_t ButtonSet::raw_bits() const {
     return bits_;
+  }
+
+  bool OperationStatus::has_native_code() const {
+    return has_native_code_;
+  }
+
+  std::uint32_t OperationStatus::native_code() const {
+    return native_code_;
+  }
+
+  OperationStatus OperationStatus::failure(ErrorCode code, std::string message, std::uint32_t native_code) {
+    OperationStatus status(code, std::move(message));
+    status.native_code_ = native_code;
+    status.has_native_code_ = true;
+    return status;
   }
 
 }  // namespace vigem

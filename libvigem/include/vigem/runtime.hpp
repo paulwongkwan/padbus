@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file libvigem/include/vigem/runtime.hpp
  * @brief Runtime and virtual gamepad handle declarations.
@@ -145,6 +147,28 @@ namespace vigem {
     OperationStatus close() override;
 
     /**
+     * @brief Check whether the device is still attached to the driver.
+     *
+     * A device can stay open after the driver detached its target, for example when
+     * the bus service restarts or another process removes it. Hosts poll this to
+     * decide whether the device has to be recreated.
+     *
+     * @return `true` when the device is open and the backend still reports it attached.
+     */
+    bool is_attached() const;
+
+    /**
+     * @brief Re-attach a device the driver dropped, for example after a bus restart.
+     *
+     * Hosts that keep a pad alive across a driver restart call this once
+     * `is_attached()` reports `false`, instead of destroying and recreating the handle.
+     * A device that is already attached reports success without doing any work.
+     *
+     * @return Re-attach operation status.
+     */
+    OperationStatus reattach();
+
+    /**
      * @brief Submit the latest gamepad input state.
      *
      * @param state Gamepad input state.
@@ -212,6 +236,19 @@ namespace vigem {
      * @return Submit count.
      */
     std::size_t submit_count() const;
+
+    /**
+     * @brief Skip submissions that would repeat the previous report.
+     *
+     * Hosts polling faster than the device needs can drop duplicate frames, but a pad that
+     * stops being written to goes stale, so a keepalive flush still submits after the given
+     * interval. Timestamp bytes are ignored by the comparison, which keeps the DualShock 4
+     * timestamp advancing whenever a frame is actually sent.
+     *
+     * @param enabled Whether duplicate reports are suppressed.
+     * @param keepalive_ms Longest interval without a submission, in milliseconds.
+     */
+    void set_submit_on_change(bool enabled, std::uint32_t keepalive_ms = 100);
 
   private:
     std::shared_ptr<detail::GamepadImpl> device_;
@@ -285,6 +322,17 @@ namespace vigem {
      * @brief Destroy the runtime and close any remaining devices.
      */
     ~Runtime();
+
+    /**
+     * @brief Get the library version as `major.minor.patch`.
+     *
+     * The public headers keep a stable layout within a minor series, so a host may keep
+     * building against the API it was compiled for. Behaviour is otherwise additive across
+     * minor releases and only changes incompatibly on a major bump.
+     *
+     * @return Version string.
+     */
+    static const char *version();
 
     /**
      * @brief Create a runtime with the requested options.
