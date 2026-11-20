@@ -18,8 +18,8 @@
 // ------- version info -------------------------------------------------------
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION             1,16,200,0
-PRODUCTVERSION          1,16,200,0
+FILEVERSION             2,0,0,0
+PRODUCTVERSION          2,0,0,0
 FILEFLAGSMASK           VS_FFI_FILEFLAGSMASK
 FILEFLAGS               VER_DBG
 FILEOS                  VOS_NT
@@ -33,12 +33,12 @@ BEGIN
 		VALUE "Comments",         "PadBus Virtual Gamepad Bus Driver"
 		VALUE "CompanyName",      "Nefarius Software Solutions e.U."
 		VALUE "FileDescription",  "PadBus Virtual Gamepad Bus Driver"
-		VALUE "FileVersion",      "1.16.200.0"
+		VALUE "FileVersion",      "2.0.0.0"
 		VALUE "InternalName",     "PadBus Virtual Gamepad Bus Driver"
 		VALUE "LegalCopyright",   "(C) 2016-2022 Nefarius Software Solutions e.U."
 		VALUE "OriginalFilename", "PadBus.sys"
 		VALUE "ProductName",      "PadBus Virtual Gamepad Bus Driver"
-		VALUE "ProductVersion",	  "1.16.200.0"
+		VALUE "ProductVersion",	  "2.0.0.0"
         END
 	END
 	BLOCK "VarFileInfo"

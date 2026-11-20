@@ -880,7 +880,7 @@ namespace padbus {
   }
 
   const char *Runtime::version() {
-    return "1.0.0";
+    return "2.0.0";
   }
 
   std::size_t Runtime::active_device_count() const {

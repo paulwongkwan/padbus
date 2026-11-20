@@ -32,7 +32,7 @@ endif()
 # CMake package files, so the library can be handed to another project without a clone.
 set(CPACK_PACKAGE_NAME "libpadbus")
 set(CPACK_PACKAGE_VENDOR "PadBus")
-set(CPACK_PACKAGE_VERSION "1.0.0")
+set(CPACK_PACKAGE_VERSION "2.0.0")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Modern C++ client API for the PadBus driver")
 set(CPACK_PACKAGE_FILE_NAME "libpadbus-${CPACK_PACKAGE_VERSION}-win64")
 set(CPACK_GENERATOR "ZIP")

@@ -162,7 +162,7 @@ Consume the library with `add_subdirectory(padbus)` and link `padbus::padbus`, o
 cmake -S . -B out -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build out
 ctest --test-dir out --output-on-failure
-cmake --install out --prefix dist/libpadbus-1.0.0
+cmake --install out --prefix dist/libpadbus-2.0.0
 cmake --build out --target package      # portable archive via CPack
 ```
 
