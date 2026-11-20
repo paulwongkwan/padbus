@@ -34,6 +34,63 @@ A few examples of the most common use cases for `ViGEm` are:
 - You want to test/benchmark your game and need a replay mechanism for your user inputs.
 - You want to work around player slot assignment order issues in `XInput`.
 
+## Modern C++ client API
+
+The `libvigem/` library adds a modern C++17 client API to the bus driver. It is modelled on
+[`libvirtualhid`](https://github.com/LizardByte/libvirtualhid): consumers describe what they want in
+portable terms — a runtime, a device profile, a normalized gamepad state, output callbacks — and the
+library translates that into the personalities the driver actually publishes.
+
+```cpp
+#include <vigem/vigem.hpp>
+
+auto runtime = vigem::Runtime::create();
+auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+if (!created) {
+  return;
+}
+
+auto &gamepad = *created.gamepad;
+gamepad.set_output_callback([](const vigem::GamepadOutput &output) {
+  if (output.kind == vigem::GamepadOutputKind::rumble) {
+    // Forward feedback to the client controller.
+  }
+});
+
+vigem::GamepadState state;
+state.buttons.set(vigem::GamepadButton::a, true);
+state.left_stick = {0.25F, -0.5F};
+state.right_trigger = 1.0F;
+gamepad.submit(state);
+```
+
+Features adopted from `libvirtualhid`:
+
+- **Runtime and profile model** — `vigem::Runtime::create()` plus `vigem::profiles::xbox_360()` and
+  `vigem::profiles::dualshock4()` replace the manual alloc/connect/add sequence, and profiles carry
+  their own vendor/product identity and capability flags.
+- **Normalized gamepad state** — sticks use `[-1.0, 1.0]`, triggers use `[0.0, 1.0]`, buttons use the
+  logical `vigem::GamepadButton` set. The library clamps out-of-range input and packs the profile
+  specific report, so callers never build `XUSB_REPORT` or `DS4_REPORT_EX` by hand.
+- **Unified output callbacks** — rumble, lightbar color, and player LED feedback from both profiles
+  arrive through a single `vigem::GamepadOutput` callback instead of two driver-specific ones.
+- **Capability queries** — `gamepad_profile_support()`, `supports_gamepad_button()`,
+  `supports_gamepad_output()`, and `Runtime::capabilities()` let hosts hide inputs a profile cannot carry.
+- **Status model** — `vigem::OperationStatus` and `vigem::ErrorCode` replace raw `VIGEM_ERROR` values and
+  carry a human-readable reason.
+- **Incremental adapter** — `vigem::GamepadStateAdapter` caches the full state and resubmits it after
+  partial updates such as `set_button()` or `set_touchpad_contact()`.
+- **Diagnostics hook** — `RuntimeOptions::log_callback` routes runtime and device lifecycle messages into
+  the host's logging system.
+- **In-memory backend** — `vigem::BackendKind::fake` creates devices without the driver, for tests and
+  API validation.
+- **Full DualShock 4 reports** — touch contacts, gyroscope, and accelerometer samples are packed into the
+  full `DS4_REPORT_EX` report, and raw output reports are available through `Gamepad::poll_raw_output()`.
+
+Scope: the driver still publishes exactly two personalities. Profiles for DualSense, Switch Pro,
+Xbox One/Series, generic HID, keyboard, mouse, or pen devices are not offered because the driver cannot
+create them; adding those requires driver work rather than client code.
+
 ## Supported Systems
 
 🛑 **Windows Server** might work but is **not supported** 🛑
@@ -62,6 +119,17 @@ The ViGEm Bus Driver is licensed under the **BSD-3-Clause**, see [LICENSE](./LIC
   - Build the `DmfK` project with Release and Debug configurations for all architectures (x64 and Win32).
 
 You can build directly within Visual Studio.
+
+The modern C++ client API in `libvigem/` only needs a C++17 compiler:
+
+```sh
+cmake -S . -B out -DVIGEM_BUILD_TESTS=ON
+cmake --build out --config Release
+ctest --test-dir out -C Release --output-on-failure
+```
+
+The Windows backend loads `ViGEmClient.dll` at runtime, so `libvigem` has no link-time dependency on the
+client SDK and reports `backend_unavailable` when the driver or library is missing.
 
 Do bear in mind that you'll need to **sign** the driver to use it without [test mode](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option#enable-or-disable-use-of-test-signed-code).
 
