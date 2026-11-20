@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/include/vigem/profiles.hpp
+ * @file libpadbus/include/padbus/profiles.hpp
  * @brief Built-in virtual device profile declarations.
  */
 #pragma once
@@ -11,9 +11,9 @@
 #include <vector>
 
 // local includes
-#include <vigem/types.hpp>
+#include <padbus/types.hpp>
 
-namespace vigem::profiles {
+namespace padbus::profiles {
 
   /**
    * @brief Create the Xbox 360-compatible gamepad profile.
@@ -50,4 +50,4 @@ namespace vigem::profiles {
    */
   std::vector<DeviceProfile> built_in_gamepad_profiles();
 
-}  // namespace vigem::profiles
+}  // namespace padbus::profiles

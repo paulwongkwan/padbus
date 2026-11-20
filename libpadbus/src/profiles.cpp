@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/src/profiles.cpp
+ * @file libpadbus/src/profiles.cpp
  * @brief Built-in virtual device profiles and profile capability helpers.
  */
-#include <vigem/profiles.hpp>
+#include <padbus/profiles.hpp>
 
 // standard includes
 #include <vector>
 
 // local includes
-#include <vigem/gamepad_adapter.hpp>
+#include <padbus/gamepad_adapter.hpp>
 
-namespace vigem::profiles {
+namespace padbus::profiles {
 
   DeviceProfile xbox_360() {
     DeviceProfile profile;
@@ -51,9 +51,9 @@ namespace vigem::profiles {
     return {xbox_360(), dualshock4()};
   }
 
-}  // namespace vigem::profiles
+}  // namespace padbus::profiles
 
-namespace vigem {
+namespace padbus {
 
   GamepadProfileSupport gamepad_profile_support(const DeviceProfile &profile) {
     GamepadProfileSupport support;
@@ -115,4 +115,4 @@ namespace vigem {
     return false;
   }
 
-}  // namespace vigem
+}  // namespace padbus

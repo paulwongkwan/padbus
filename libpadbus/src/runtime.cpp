@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/src/runtime.cpp
+ * @file libpadbus/src/runtime.cpp
  * @brief Runtime, device handles, the in-memory backend, and report packing.
  */
 #include "detail.hpp"
@@ -12,7 +12,7 @@
 #include <cstring>
 #include <utility>
 
-namespace vigem::detail {
+namespace padbus::detail {
 
   namespace {
 
@@ -743,9 +743,9 @@ namespace vigem::detail {
     }
   }
 
-}  // namespace vigem::detail
+}  // namespace padbus::detail
 
-namespace vigem {
+namespace padbus {
 
   Gamepad::Gamepad(detail::RuntimeConstructionToken /*token*/, std::shared_ptr<detail::GamepadImpl> device):
       device_(std::move(device)) {}
@@ -1057,4 +1057,4 @@ namespace vigem {
     return gamepad_->close();
   }
 
-}  // namespace vigem
+}  // namespace padbus

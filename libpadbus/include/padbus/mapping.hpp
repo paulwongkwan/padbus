@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/include/vigem/mapping.hpp
+ * @file libpadbus/include/padbus/mapping.hpp
  * @brief Input shaping and remapping between physical controllers and emulated pads.
  */
 #pragma once
@@ -13,9 +13,9 @@
 #include <vector>
 
 // local includes
-#include <vigem/types.hpp>
+#include <padbus/types.hpp>
 
-namespace vigem {
+namespace padbus {
 
   /**
    * @brief Response shaping for an analog stick.
@@ -210,4 +210,4 @@ namespace vigem {
    */
   std::optional<GamepadMapping> deserialize(std::string_view text, std::string *error = nullptr);
 
-}  // namespace vigem
+}  // namespace padbus

@@ -1,4 +1,4 @@
-; Virtual Gamepad Emulation Framework - Windows kernel-mode bus driver
+; PadBus - Windows 11 kernel-mode bus driver
 ; 
 ; BSD 3-Clause License
 ; 
@@ -107,6 +107,6 @@ KmdfLibraryVersion = $KMDFVERSION$
 [Strings]
 SPSVCINST_ASSOCSERVICE= 0x00000002
 ManufacturerName="Nefarius Software Solutions e.U."
-DiskName = "Nefarius ViGEmBus Installation Disk"
-ViGEmBus.DeviceDesc = "Nefarius Virtual Gamepad Emulation Bus"
-ViGEmBus.SVCDESC = "Nefarius Virtual Gamepad Emulation Service"
+DiskName = "PadBus Installation Disk"
+ViGEmBus.DeviceDesc = "PadBus Virtual Gamepad Bus"
+ViGEmBus.SVCDESC = "PadBus Virtual Gamepad Bus Service"

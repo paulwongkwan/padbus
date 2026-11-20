@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/src/detail.hpp
- * @brief Internal interfaces shared by the ViGEm client backends.
+ * @file libpadbus/src/detail.hpp
+ * @brief Internal interfaces shared by the PadBus backends.
  */
 #pragma once
 
@@ -16,9 +16,9 @@
 #include <vector>
 
 // local includes
-#include <vigem/vigem.hpp>
+#include <padbus/padbus.hpp>
 
-namespace vigem::detail {
+namespace padbus::detail {
 
   /**
    * @brief Thread-safe diagnostic sink shared by a runtime and its devices.
@@ -457,4 +457,4 @@ namespace vigem::detail {
     std::atomic<DeviceId> next_id_ {1};
   };
 
-}  // namespace vigem::detail
+}  // namespace padbus::detail

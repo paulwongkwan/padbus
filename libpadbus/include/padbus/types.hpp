@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/include/vigem/types.hpp
- * @brief Core public types for the modern ViGEm client API.
+ * @file libpadbus/include/padbus/types.hpp
+ * @brief Core public types for the modern PadBus API.
  */
 #pragma once
 
@@ -16,9 +16,9 @@
 #include <vector>
 
 /**
- * @brief Public ViGEm client API namespace.
+ * @brief Public PadBus API namespace.
  */
-namespace vigem {
+namespace padbus {
 
   /**
    * @brief Stable identifier assigned to a virtual device instance.
@@ -26,12 +26,12 @@ namespace vigem {
   using DeviceId = std::uint64_t;
 
   /**
-   * @brief Error categories returned by ViGEm client operations.
+   * @brief Error categories returned by PadBus operations.
    */
   enum class ErrorCode {
     ok,  ///< Operation completed successfully.
     invalid_argument,  ///< Caller supplied invalid input.
-    backend_unavailable,  ///< The ViGEm bus driver or its client library is unusable on this host.
+    backend_unavailable,  ///< The PadBus driver or its client library is unusable on this host.
     unsupported_profile,  ///< The backend cannot create the requested device profile.
     device_closed,  ///< Device operation was requested after the device closed.
     no_free_slot,  ///< Every emulated device slot provided by the driver is occupied.
@@ -164,7 +164,7 @@ namespace vigem {
   const char *to_string(LogLevel level);
 
   /**
-   * @brief Consumer callback that receives ViGEm client diagnostic messages.
+   * @brief Consumer callback that receives PadBus diagnostic messages.
    *
    * The callback is invoked synchronously from the thread performing the
    * operation, which includes driver-owned notification threads. If the callback
@@ -450,7 +450,7 @@ namespace vigem {
   };
 
   /**
-   * @brief Common gamepad input state accepted by the ViGEm client API.
+   * @brief Common gamepad input state accepted by the PadBus API.
    *
    * Values are normalized so consumers can forward client input without
    * knowing how each emulated device encodes its report.
@@ -577,4 +577,4 @@ namespace vigem {
    */
   using OutputCallback = std::function<void(const GamepadOutput &)>;
 
-}  // namespace vigem
+}  // namespace padbus

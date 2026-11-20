@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/src/types.cpp
- * @brief Core public type implementations for the modern ViGEm client API.
+ * @file libpadbus/src/types.cpp
+ * @brief Core public type implementations for the modern PadBus API.
  */
-#include <vigem/types.hpp>
+#include <padbus/types.hpp>
 
 // standard includes
 #include <utility>
 
-namespace vigem {
+namespace padbus {
 
   namespace {
 
@@ -123,4 +123,4 @@ namespace vigem {
     return status;
   }
 
-}  // namespace vigem
+}  // namespace padbus

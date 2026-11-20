@@ -1,2 +1,2 @@
-add_executable(vigem_gamepad_adapter gamepad_adapter.cpp)
-target_link_libraries(vigem_gamepad_adapter PRIVATE vigem::vigem)
+add_executable(padbus_gamepad_adapter gamepad_adapter.cpp)
+target_link_libraries(padbus_gamepad_adapter PRIVATE padbus::padbus)

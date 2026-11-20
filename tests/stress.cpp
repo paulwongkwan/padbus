@@ -8,7 +8,7 @@
  * thread and shutdown closes the device from another. The API must stay consistent under
  * that overlap instead of tearing the device down underneath an in-flight report.
  */
-#include <vigem/vigem.hpp>
+#include <padbus/padbus.hpp>
 
 // standard includes
 #include <atomic>
@@ -35,16 +35,16 @@ namespace {
 
 int main() {
   for (int round = 0; round < 5; ++round) {
-    vigem::RuntimeOptions options;
-    options.backend = vigem::BackendKind::fake;
+    padbus::RuntimeOptions options;
+    options.backend = padbus::BackendKind::fake;
 
-    auto runtime = vigem::Runtime::create(options);
+    auto runtime = padbus::Runtime::create(options);
     check(runtime != nullptr, "runtime is created");
     if (!runtime) {
       break;
     }
 
-    auto created = runtime->create_gamepad(vigem::profiles::dualshock4());
+    auto created = runtime->create_gamepad(padbus::profiles::dualshock4());
     if (!created) {
       std::printf("FAIL: gamepad is created\n");
       break;
@@ -52,7 +52,7 @@ int main() {
 
     auto &gamepad = *created.gamepad;
     std::atomic<int> feedback {0};
-    gamepad.set_output_callback([&feedback](const vigem::GamepadOutput &) { feedback.fetch_add(1); });
+    gamepad.set_output_callback([&feedback](const padbus::GamepadOutput &) { feedback.fetch_add(1); });
 
     std::atomic<bool> stop {false};
     std::vector<std::thread> workers;
@@ -61,13 +61,13 @@ int main() {
     for (int index = 0; index < kSubmitThreads; ++index) {
       workers.emplace_back([&gamepad, &stop, index] {
         for (int frame = 0; frame < kFramesPerThread && !stop.load(); ++frame) {
-          vigem::GamepadState state;
+          padbus::GamepadState state;
           state.left_stick = {static_cast<float>(frame % 10) / 10.0F, 0.0F};
-          state.buttons.set(vigem::GamepadButton::a, frame % 2 == 0);
+          state.buttons.set(padbus::GamepadButton::a, frame % 2 == 0);
           const auto status = gamepad.submit(state);
           // Either the frame landed or the device was already closed underneath it.
-          if (!status.ok() && status.code() != vigem::ErrorCode::device_closed &&
-              status.code() != vigem::ErrorCode::device_detached) {
+          if (!status.ok() && status.code() != padbus::ErrorCode::device_closed &&
+              status.code() != padbus::ErrorCode::device_detached) {
             std::printf("FAIL: unexpected submit status in worker %d\n", index);
             ++failures;
           }
@@ -77,8 +77,8 @@ int main() {
 
     // A driver notification thread delivering feedback while the workers submit.
     std::thread notifier([&gamepad, &feedback, &stop] {
-      vigem::GamepadOutput rumble;
-      rumble.kind = vigem::GamepadOutputKind::rumble;
+      padbus::GamepadOutput rumble;
+      rumble.kind = padbus::GamepadOutputKind::rumble;
       rumble.low_frequency_rumble = 0x4000;
       while (!stop.load()) {
         (void)gamepad.dispatch_output(rumble);
@@ -97,7 +97,7 @@ int main() {
     notifier.join();
 
     check(!gamepad.is_attached(), "the closed device reports itself detached");
-    check(gamepad.submit(vigem::GamepadState {}).code() == vigem::ErrorCode::device_closed,
+    check(gamepad.submit(padbus::GamepadState {}).code() == padbus::ErrorCode::device_closed,
           "submissions after the close report a closed device");
     check(runtime->active_device_count() == 0, "no device is left open");
   }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/include/vigem/gamepad_adapter.hpp
+ * @file libpadbus/include/padbus/gamepad_adapter.hpp
  * @brief Profile-neutral gamepad adapter helpers.
  */
 #pragma once
@@ -13,11 +13,11 @@
 #include <optional>
 
 // local includes
-#include <vigem/mapping.hpp>
-#include <vigem/runtime.hpp>
-#include <vigem/types.hpp>
+#include <padbus/mapping.hpp>
+#include <padbus/runtime.hpp>
+#include <padbus/types.hpp>
 
-namespace vigem {
+namespace padbus {
 
   /**
    * @brief Profile support summary for portable gamepad adapter code.
@@ -360,4 +360,4 @@ namespace vigem {
     }
   };
 
-}  // namespace vigem
+}  // namespace padbus

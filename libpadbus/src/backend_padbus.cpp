@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/src/backend_vigem.cpp
+ * @file libpadbus/src/backend_padbus.cpp
  * @brief ViGEmBus driver backend that loads the client library at runtime.
  *
  * The backend resolves the `ViGEmClient` C API dynamically so the library keeps
@@ -31,7 +31,7 @@
 #endif
 #include <windows.h>
 
-namespace vigem::detail {
+namespace padbus::detail {
 
   namespace {
 
@@ -524,7 +524,7 @@ namespace vigem::detail {
         set_log(log);
 
         BackendCapabilities capabilities;
-        capabilities.backend_name = "vigem-driver";
+        capabilities.backend_name = "padbus-driver";
         capabilities.requires_installed_driver = true;
 
         const auto library = options.client_library_path.empty() ? std::wstring(L"ViGEmClient.dll")
@@ -635,4 +635,4 @@ namespace vigem::detail {
     return std::make_unique<VigemBackend>(options, std::move(log));
   }
 
-}  // namespace vigem::detail
+}  // namespace padbus::detail

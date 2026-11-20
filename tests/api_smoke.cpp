@@ -2,12 +2,12 @@
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
  * @file tests/api_smoke.cpp
- * @brief Behavioural checks for the modern ViGEm client API.
+ * @brief Behavioural checks for the modern PadBus API.
  *
  * The checks run against the in-memory backend so report packing, status
  * handling, callbacks, and the adapter are exercised without the bus driver.
  */
-#include <vigem/vigem.hpp>
+#include <padbus/padbus.hpp>
 
 // standard includes
 #include <chrono>
@@ -38,40 +38,40 @@ namespace {
     }
   }
 
-  vigem::RuntimeOptions fake_options() {
-    vigem::RuntimeOptions options;
-    options.backend = vigem::BackendKind::fake;
+  padbus::RuntimeOptions fake_options() {
+    padbus::RuntimeOptions options;
+    options.backend = padbus::BackendKind::fake;
     return options;
   }
 
   void test_runtime_and_profiles() {
-    auto runtime = vigem::Runtime::create(fake_options());
+    auto runtime = padbus::Runtime::create(fake_options());
     check(runtime != nullptr, "fake runtime is created");
-    check(runtime->backend_kind() == vigem::BackendKind::fake, "runtime reports the fake backend");
+    check(runtime->backend_kind() == padbus::BackendKind::fake, "runtime reports the fake backend");
     check(runtime->capabilities().available, "fake backend is available");
     check(runtime->capabilities().supports_gamepad, "fake backend supports gamepads");
 
-    const auto xbox = vigem::profiles::xbox_360();
-    const auto ds4 = vigem::profiles::dualshock4();
+    const auto xbox = padbus::profiles::xbox_360();
+    const auto ds4 = padbus::profiles::dualshock4();
     check_eq(xbox.vendor_id, 0x045E, "xbox 360 vendor id");
     check_eq(xbox.product_id, 0x028E, "xbox 360 product id");
     check_eq(ds4.vendor_id, 0x054C, "dualshock 4 vendor id");
     check(xbox.capabilities.supports_rumble, "xbox 360 supports rumble");
     check(ds4.capabilities.supports_touchpad, "dualshock 4 supports the touchpad");
     check(!xbox.capabilities.supports_touchpad, "xbox 360 has no touchpad");
-    check_eq(vigem::profiles::built_in_gamepad_profiles().size(), 2, "two built-in profiles");
+    check_eq(padbus::profiles::built_in_gamepad_profiles().size(), 2, "two built-in profiles");
 
-    const auto support = vigem::gamepad_profile_support(ds4);
+    const auto support = padbus::gamepad_profile_support(ds4);
     check(support.supports_touchpad_button, "ds4 profile reports a touchpad button");
-    check(!vigem::supports_gamepad_button(xbox, vigem::GamepadButton::touchpad), "xbox 360 has no touchpad button");
-    check(vigem::supports_gamepad_output(ds4, vigem::GamepadOutputKind::rgb_led), "ds4 emits lightbar output");
-    check(!vigem::supports_gamepad_output(xbox, vigem::GamepadOutputKind::rgb_led), "xbox 360 has no lightbar");
-    check(vigem::supports_gamepad_output(xbox, vigem::GamepadOutputKind::player_leds), "xbox 360 emits player leds");
+    check(!padbus::supports_gamepad_button(xbox, padbus::GamepadButton::touchpad), "xbox 360 has no touchpad button");
+    check(padbus::supports_gamepad_output(ds4, padbus::GamepadOutputKind::rgb_led), "ds4 emits lightbar output");
+    check(!padbus::supports_gamepad_output(xbox, padbus::GamepadOutputKind::rgb_led), "xbox 360 has no lightbar");
+    check(padbus::supports_gamepad_output(xbox, padbus::GamepadOutputKind::player_leds), "xbox 360 emits player leds");
   }
 
   void test_xbox_report_packing() {
-    auto runtime = vigem::Runtime::create(fake_options());
-    auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+    auto runtime = padbus::Runtime::create(fake_options());
+    auto created = runtime->create_gamepad(padbus::profiles::xbox_360());
     check(static_cast<bool>(created), "xbox 360 gamepad is created");
     if (!created) {
       return;
@@ -82,10 +82,10 @@ namespace {
     check_eq(gamepad.device_id(), 1, "first device id is one");
     check_eq(runtime->active_device_count(), 1, "runtime tracks one active device");
 
-    vigem::GamepadState state;
-    state.buttons.set(vigem::GamepadButton::a);
-    state.buttons.set(vigem::GamepadButton::dpad_up);
-    state.buttons.set(vigem::GamepadButton::left_shoulder);
+    padbus::GamepadState state;
+    state.buttons.set(padbus::GamepadButton::a);
+    state.buttons.set(padbus::GamepadButton::dpad_up);
+    state.buttons.set(padbus::GamepadButton::left_shoulder);
     state.left_stick = {1.0F, -1.0F};
     state.left_trigger = 1.0F;
     state.right_trigger = 0.5F;
@@ -105,8 +105,8 @@ namespace {
     }
 
     // Values outside the normalized range are clamped instead of wrapping.
-    vigem::GamepadState extreme;
-    extreme.buttons.set(vigem::GamepadButton::b);
+    padbus::GamepadState extreme;
+    extreme.buttons.set(padbus::GamepadButton::b);
     extreme.left_stick = {5.0F, -5.0F};
     extreme.left_stick.y = -5.0F;
     extreme.right_trigger = 2.0F;
@@ -123,7 +123,7 @@ namespace {
 
     // The normalized vertical axis is positive-up, and the Xbox 360 report carries it
     // as a signed value, so no inversion happens on this profile.
-    vigem::GamepadState vertical;
+    padbus::GamepadState vertical;
     vertical.left_stick = {0.0F, 1.0F};
     check(gamepad.submit(vertical).ok(), "vertical stick submit succeeds");
     const auto vertical_report = gamepad.last_input_report();
@@ -137,29 +137,29 @@ namespace {
     check(gamepad.close().ok(), "xbox 360 gamepad closes");
     check(!gamepad.is_open(), "closed gamepad reports closed");
     check_eq(runtime->active_device_count(), 0, "closed device leaves the active count");
-    check_eq(static_cast<int>(gamepad.submit(state).code()), static_cast<int>(vigem::ErrorCode::device_closed),
+    check_eq(static_cast<int>(gamepad.submit(state).code()), static_cast<int>(padbus::ErrorCode::device_closed),
              "submit after close reports device_closed");
     check(gamepad.close().ok(), "close is idempotent");
   }
 
   void test_dualshock4_report_packing() {
-    auto runtime = vigem::Runtime::create(fake_options());
-    auto created = runtime->create_gamepad(vigem::profiles::dualshock4());
+    auto runtime = padbus::Runtime::create(fake_options());
+    auto created = runtime->create_gamepad(padbus::profiles::dualshock4());
     check(static_cast<bool>(created), "dualshock 4 gamepad is created");
     if (!created) {
       return;
     }
 
     auto &gamepad = *created.gamepad;
-    vigem::GamepadState state;
-    state.buttons.set(vigem::GamepadButton::a);
-    state.buttons.set(vigem::GamepadButton::dpad_up);
-    state.buttons.set(vigem::GamepadButton::touchpad);
+    padbus::GamepadState state;
+    state.buttons.set(padbus::GamepadButton::a);
+    state.buttons.set(padbus::GamepadButton::dpad_up);
+    state.buttons.set(padbus::GamepadButton::touchpad);
     state.left_stick = {1.0F, -1.0F};
     state.left_trigger = 1.0F;
     state.right_trigger = 0.5F;
-    state.acceleration = vigem::Vector3 {1.0F, 2.0F, 3.0F};
-    state.gyroscope = vigem::Vector3 {4.0F, 5.0F, 6.0F};
+    state.acceleration = padbus::Vector3 {1.0F, 2.0F, 3.0F};
+    state.gyroscope = padbus::Vector3 {4.0F, 5.0F, 6.0F};
     state.touchpad_contacts[0].id = 1;
     state.touchpad_contacts[0].active = true;
     state.touchpad_contacts[0].x = 0.5F;
@@ -216,7 +216,7 @@ namespace {
       check_eq(lifted[34], 0x80, "lifted contact reports the up flag");
 
       // Any reported pressure sets the digital trigger bit; a released trigger clears it.
-      vigem::GamepadState light;
+      padbus::GamepadState light;
       light.left_trigger = 0.02F;
       light.right_trigger = 1.0F / 255.0F;
       check(gamepad.submit(light).ok(), "light-trigger submit succeeds");
@@ -227,7 +227,7 @@ namespace {
       check_eq(light_report[7], 5, "light left trigger keeps its analog value");
       check_eq(light_report[8], 1, "light right trigger keeps its analog value");
 
-      vigem::GamepadState released;
+      padbus::GamepadState released;
       check(gamepad.submit(released).ok(), "released-trigger submit succeeds");
       const auto released_report = gamepad.last_input_report();
       const auto released_buttons = static_cast<std::uint16_t>(released_report[4] | (released_report[5] << 8));
@@ -235,7 +235,7 @@ namespace {
     }
 
     // Vertical direction follows the same rule: up is zero on the DualShock 4 byte.
-    vigem::GamepadState vertical;
+    padbus::GamepadState vertical;
     vertical.left_stick = {0.0F, 1.0F};
     vertical.right_stick = {0.0F, -1.0F};
     check(gamepad.submit(vertical).ok(), "vertical stick submit succeeds");
@@ -245,7 +245,7 @@ namespace {
 
     // The report timestamp advances in 5.333 us units, which applications that require
     // a moving DualShock 4 timestamp depend on.
-    vigem::GamepadState repeated;
+    padbus::GamepadState repeated;
     check(gamepad.submit(repeated).ok(), "repeated submit succeeds");
     const auto first_report = gamepad.last_input_report();
     const auto first_timestamp = static_cast<std::uint16_t>(first_report[9] | (first_report[10] << 8));
@@ -256,15 +256,15 @@ namespace {
     check(second_timestamp != first_timestamp, "dualshock 4 timestamp advances between reports");
 
     // Declared battery state is published in both bytes the driver exposes.
-    vigem::GamepadState half_charge;
-    half_charge.battery = vigem::GamepadBattery {50, true};
+    padbus::GamepadState half_charge;
+    half_charge.battery = padbus::GamepadBattery {50, true};
     check(gamepad.submit(half_charge).ok(), "battery submit succeeds");
     const auto half_report = gamepad.last_input_report();
     check_eq(half_report[29], 0x15, "half charge on cable sets the status nibble");
     check_eq(half_report[11], 127, "battery level byte carries the percentage");
 
-    vigem::GamepadState full_charge;
-    full_charge.battery = vigem::GamepadBattery {100, false};
+    padbus::GamepadState full_charge;
+    full_charge.battery = padbus::GamepadBattery {100, false};
     check(gamepad.submit(full_charge).ok(), "full battery submit succeeds");
     const auto full_report = gamepad.last_input_report();
     check_eq(full_report[29], 0x0A, "full battery clears the cable bit");
@@ -279,19 +279,19 @@ namespace {
   }
 
   void test_output_dispatch() {
-    auto runtime = vigem::Runtime::create(fake_options());
-    auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+    auto runtime = padbus::Runtime::create(fake_options());
+    auto created = runtime->create_gamepad(padbus::profiles::xbox_360());
     if (!created) {
       check(false, "output dispatch device is created");
       return;
     }
 
     auto &gamepad = *created.gamepad;
-    std::vector<vigem::GamepadOutput> received;
-    gamepad.set_output_callback([&received](const vigem::GamepadOutput &output) { received.push_back(output); });
+    std::vector<padbus::GamepadOutput> received;
+    gamepad.set_output_callback([&received](const padbus::GamepadOutput &output) { received.push_back(output); });
 
-    vigem::GamepadOutput rumble;
-    rumble.kind = vigem::GamepadOutputKind::rumble;
+    padbus::GamepadOutput rumble;
+    rumble.kind = padbus::GamepadOutputKind::rumble;
     rumble.low_frequency_rumble = 65535;
     rumble.high_frequency_rumble = 32768;
     check(gamepad.dispatch_output(rumble).ok(), "output dispatch succeeds");
@@ -301,7 +301,7 @@ namespace {
     // A throwing callback is disabled after its first failure instead of interrupting
     // input delivery, and it must not run again afterwards.
     int throw_count = 0;
-    gamepad.set_output_callback([&throw_count](const vigem::GamepadOutput &) {
+    gamepad.set_output_callback([&throw_count](const padbus::GamepadOutput &) {
       ++throw_count;
       throw std::runtime_error("boom");
     });
@@ -316,8 +316,8 @@ namespace {
   }
 
   void test_adapter_incremental_updates() {
-    auto runtime = vigem::Runtime::create(fake_options());
-    auto created = vigem::GamepadStateAdapter::create(*runtime, vigem::profiles::dualshock4());
+    auto runtime = padbus::Runtime::create(fake_options());
+    auto created = padbus::GamepadStateAdapter::create(*runtime, padbus::profiles::dualshock4());
     check(static_cast<bool>(created), "adapter is created");
     if (!created) {
       return;
@@ -326,23 +326,23 @@ namespace {
     auto &adapter = *created.adapter;
     check(adapter.is_open(), "adapter reports an open gamepad");
 
-    check(adapter.set_button(vigem::GamepadButton::x, true).ok(), "adapter button update succeeds");
+    check(adapter.set_button(padbus::GamepadButton::x, true).ok(), "adapter button update succeeds");
     check(adapter.set_right_trigger(1.0F).ok(), "adapter trigger update succeeds");
     check(adapter.set_left_stick({-0.5F, 0.25F}).ok(), "adapter stick update succeeds");
-    vigem::GamepadTouchContact contact;
+    padbus::GamepadTouchContact contact;
     contact.id = 4;
     contact.active = true;
     contact.x = 0.25F;
     contact.y = 0.75F;
     check(adapter.set_touchpad_contact(1, contact).ok(), "adapter contact update succeeds");
-    check(adapter.state().buttons.test(vigem::GamepadButton::x), "adapter caches buttons across updates");
+    check(adapter.state().buttons.test(padbus::GamepadButton::x), "adapter caches buttons across updates");
     check(adapter.state().right_trigger == 1.0F, "adapter caches triggers across updates");
 
     check_eq(adapter.gamepad()->submit_count(), 4, "every adapter update submits a full report");
     check_eq(adapter.gamepad()->last_input_report().size(), 63, "adapter reports use the profile layout");
 
     check_eq(static_cast<int>(adapter.set_touchpad_contact(5, contact).code()),
-             static_cast<int>(vigem::ErrorCode::invalid_argument), "out-of-range contact index is rejected");
+             static_cast<int>(padbus::ErrorCode::invalid_argument), "out-of-range contact index is rejected");
 
     check(adapter.clear_motion().ok(), "adapter clears motion data");
     check(!adapter.state().gyroscope.has_value(), "motion data is cleared");
@@ -353,9 +353,9 @@ namespace {
   }
 
   void test_runtime_lifecycle() {
-    auto runtime = vigem::Runtime::create(fake_options());
-    auto first = runtime->create_gamepad(vigem::profiles::xbox_360());
-    auto second = runtime->create_gamepad(vigem::profiles::dualshock4());
+    auto runtime = padbus::Runtime::create(fake_options());
+    auto first = runtime->create_gamepad(padbus::profiles::xbox_360());
+    auto second = runtime->create_gamepad(padbus::profiles::dualshock4());
     check(static_cast<bool>(first) && static_cast<bool>(second), "two devices are created");
     check_eq(runtime->active_device_count(), 2, "both devices are active");
     check(first.gamepad->device_id() != second.gamepad->device_id(), "device ids are distinct");
@@ -366,7 +366,7 @@ namespace {
     check(!second.gamepad->is_open(), "close_all closes the second device");
 
     // A custom identity is preserved on the effective profile.
-    vigem::DeviceProfile custom = vigem::profiles::xbox_360();
+    padbus::DeviceProfile custom = padbus::profiles::xbox_360();
     custom.vendor_id = 0x1234;
     custom.product_id = 0x5678;
     auto custom_device = runtime->create_gamepad(custom);
@@ -377,22 +377,22 @@ namespace {
     }
 
     // Runtime destruction closes devices that are still open.
-    auto leftover = runtime->create_gamepad(vigem::profiles::xbox_360());
+    auto leftover = runtime->create_gamepad(padbus::profiles::xbox_360());
     check(static_cast<bool>(leftover), "leftover device is created");
     runtime.reset();
     check(!leftover.gamepad->is_open(), "runtime destruction closes open devices");
   }
 
   void test_platform_backend_reporting() {
-    auto runtime = vigem::Runtime::create();
+    auto runtime = padbus::Runtime::create();
     check(runtime != nullptr, "platform runtime is created");
-    check(runtime->backend_kind() == vigem::BackendKind::platform_default, "platform backend is selected");
+    check(runtime->backend_kind() == padbus::BackendKind::platform_default, "platform backend is selected");
     check(runtime->capabilities().requires_installed_driver, "platform backend requires the driver");
 
     if (!runtime->capabilities().available) {
-      auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+      auto created = runtime->create_gamepad(padbus::profiles::xbox_360());
       check(!created, "device creation fails without the driver");
-      check_eq(static_cast<int>(created.status.code()), static_cast<int>(vigem::ErrorCode::backend_unavailable),
+      check_eq(static_cast<int>(created.status.code()), static_cast<int>(padbus::ErrorCode::backend_unavailable),
                "missing driver reports backend_unavailable");
       check(!created.status.message().empty(), "missing driver reports a reason");
     }
@@ -401,104 +401,104 @@ namespace {
   void test_platform_library_override() {
     // An explicit client library path that cannot be loaded must degrade to
     // backend_unavailable with a reason instead of failing device creation obscurely.
-    vigem::RuntimeOptions options;
-    options.backend = vigem::BackendKind::platform_default;
-    options.client_library_path = "Z:\\vigem-missing\\ViGEmClient.dll";
+    padbus::RuntimeOptions options;
+    options.backend = padbus::BackendKind::platform_default;
+    options.client_library_path = "Z:\\padbus-missing\\ViGEmClient.dll";
 
-    auto runtime = vigem::Runtime::create(options);
+    auto runtime = padbus::Runtime::create(options);
     check(runtime != nullptr, "runtime with an explicit client path is created");
     check(!runtime->capabilities().available, "a bogus client library path is unavailable");
 
-    auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+    auto created = runtime->create_gamepad(padbus::profiles::xbox_360());
     check(!created, "device creation fails with a bogus client library path");
-    check_eq(static_cast<int>(created.status.code()), static_cast<int>(vigem::ErrorCode::backend_unavailable),
+    check_eq(static_cast<int>(created.status.code()), static_cast<int>(padbus::ErrorCode::backend_unavailable),
              "bogus client library path reports backend_unavailable");
     check(!created.status.message().empty(), "bogus client library path reports a reason");
   }
 
   void test_input_mapping() {
-    vigem::GamepadMapping mapping;
+    padbus::GamepadMapping mapping;
 
     // Drift inside the deadzone is reported as centered, and leaving it starts on the
     // anti-deadzone floor instead of zero, the way DS4Windows exposes the two zones.
     mapping.left_stick.deadzone = 0.2F;
     mapping.left_stick.anti_deadzone = 0.4F;
 
-    vigem::GamepadState drifting;
+    padbus::GamepadState drifting;
     drifting.left_stick = {0.1F, 0.1F};
     check(mapping.apply(drifting).left_stick.x == 0.0F, "stick drift inside the deadzone is centered");
 
-    vigem::GamepadState edge;
+    padbus::GamepadState edge;
     edge.left_stick = {0.21F, 0.0F};
     const auto near_edge = mapping.apply(edge).left_stick;
     check(near_edge.x > 0.39F && near_edge.x < 0.42F, "anti-deadzone lifts the first movement off zero");
 
-    vigem::GamepadState full;
+    padbus::GamepadState full;
     full.left_stick = {1.0F, 0.0F};
     check(mapping.apply(full).left_stick.x > 0.99F, "full deflection stays at full output");
 
     // Saturation, response curve and inversion shape the remaining travel.
-    vigem::GamepadMapping early;
+    padbus::GamepadMapping early;
     early.left_stick.saturation = 0.5F;
-    vigem::GamepadState half;
+    padbus::GamepadState half;
     half.left_stick = {0.5F, 0.0F};
     check(early.apply(half).left_stick.x > 0.99F, "saturation reaches full output early");
 
-    vigem::GamepadMapping curved;
+    padbus::GamepadMapping curved;
     curved.right_stick.exponent = 2.0F;
-    vigem::GamepadState half_up;
+    padbus::GamepadState half_up;
     half_up.right_stick = {0.0F, 0.5F};
     half_up.left_stick = {0.0F, 0.5F};
     const auto curved_y = curved.apply(half_up).right_stick.y;
     check(curved_y > 0.24F && curved_y < 0.26F, "response curve squares the travel");
 
-    vigem::GamepadMapping inverted;
+    padbus::GamepadMapping inverted;
     inverted.left_stick.invert_y = true;
     check(inverted.apply(half_up).left_stick.y < -0.49F, "inverted vertical axis points down");
 
     // Triggers get their own deadzone and saturation.
-    vigem::GamepadMapping triggers;
+    padbus::GamepadMapping triggers;
     triggers.left_trigger.deadzone = 0.3F;
-    vigem::GamepadState resting;
+    padbus::GamepadState resting;
     resting.left_trigger = 0.2F;
     check(triggers.apply(resting).left_trigger == 0.0F, "trigger inside the deadzone reads zero");
 
-    vigem::GamepadState pressed;
+    padbus::GamepadState pressed;
     pressed.left_trigger = 0.65F;
     const auto shaped_trigger = triggers.apply(pressed).left_trigger;
     check(shaped_trigger > 0.49F && shaped_trigger < 0.51F, "trigger deadzone rescales the travel");
 
     // A stick can drive the directional pad, and stop being visible to the game.
-    vigem::GamepadMapping dpad;
+    padbus::GamepadMapping dpad;
     dpad.dpad_from_left_stick.enabled = true;
     dpad.dpad_from_left_stick.threshold = 0.6F;
     dpad.dpad_from_left_stick.suppress_stick = true;
 
-    vigem::GamepadState corner;
+    padbus::GamepadState corner;
     corner.left_stick = {0.8F, -0.7F};
     const auto synthesized = dpad.apply(corner);
-    check(synthesized.buttons.test(vigem::GamepadButton::dpad_right), "stick presses the right direction");
-    check(synthesized.buttons.test(vigem::GamepadButton::dpad_down), "stick presses the down direction");
-    check(!synthesized.buttons.test(vigem::GamepadButton::dpad_up), "opposite direction stays released");
+    check(synthesized.buttons.test(padbus::GamepadButton::dpad_right), "stick presses the right direction");
+    check(synthesized.buttons.test(padbus::GamepadButton::dpad_down), "stick presses the down direction");
+    check(!synthesized.buttons.test(padbus::GamepadButton::dpad_up), "opposite direction stays released");
     check(synthesized.left_stick.x == 0.0F, "suppressing the stick keeps the game from seeing it");
 
     // Buttons can be redirected or suppressed, as DS4Windows and x360ce allow.
-    vigem::GamepadMapping remap;
-    remap.buttons.push_back({vigem::GamepadButton::a, vigem::GamepadButton::b, true});
-    remap.buttons.push_back({vigem::GamepadButton::x, vigem::GamepadButton::x, false});
+    padbus::GamepadMapping remap;
+    remap.buttons.push_back({padbus::GamepadButton::a, padbus::GamepadButton::b, true});
+    remap.buttons.push_back({padbus::GamepadButton::x, padbus::GamepadButton::x, false});
 
-    vigem::GamepadState physical;
-    physical.buttons.set(vigem::GamepadButton::a, true);
-    physical.buttons.set(vigem::GamepadButton::x, true);
+    padbus::GamepadState physical;
+    physical.buttons.set(padbus::GamepadButton::a, true);
+    physical.buttons.set(padbus::GamepadButton::x, true);
     const auto remapped = remap.apply(physical);
-    check(remapped.buttons.test(vigem::GamepadButton::b), "mapped button is pressed on the emulated pad");
-    check(!remapped.buttons.test(vigem::GamepadButton::a), "source button is released after the remap");
-    check(!remapped.buttons.test(vigem::GamepadButton::x), "disabled button is suppressed");
+    check(remapped.buttons.test(padbus::GamepadButton::b), "mapped button is pressed on the emulated pad");
+    check(!remapped.buttons.test(padbus::GamepadButton::a), "source button is released after the remap");
+    check(!remapped.buttons.test(padbus::GamepadButton::x), "disabled button is suppressed");
 
     // Everything the mapping does not touch is forwarded unchanged.
-    vigem::GamepadState extras;
-    extras.battery = vigem::GamepadBattery {42, true};
-    extras.gyroscope = vigem::Vector3 {1.0F, 2.0F, 3.0F};
+    padbus::GamepadState extras;
+    extras.battery = padbus::GamepadBattery {42, true};
+    extras.gyroscope = padbus::Vector3 {1.0F, 2.0F, 3.0F};
     extras.touchpad_contacts[0].active = true;
     extras.touchpad_contacts[0].x = 0.25F;
     const auto preserved = mapping.apply(extras);
@@ -508,8 +508,8 @@ namespace {
   }
 
   void test_device_recovery_and_dedup() {
-    auto runtime = vigem::Runtime::create(fake_options());
-    auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+    auto runtime = padbus::Runtime::create(fake_options());
+    auto created = runtime->create_gamepad(padbus::profiles::xbox_360());
     if (!created) {
       check(false, "recovery device is created");
       return;
@@ -521,8 +521,8 @@ namespace {
 
     // Duplicate frames are dropped, but a keepalive flush still reaches the device.
     gamepad.set_submit_on_change(true, 50);
-    vigem::GamepadState state;
-    state.buttons.set(vigem::GamepadButton::a, true);
+    padbus::GamepadState state;
+    state.buttons.set(padbus::GamepadButton::a, true);
     check(gamepad.submit(state).ok(), "the first frame submits");
     const auto after_first = gamepad.submit_count();
     check(gamepad.submit(state).ok(), "a duplicate frame reports success");
@@ -539,15 +539,15 @@ namespace {
     gamepad.set_submit_on_change(false);
 
     check(gamepad.close().ok(), "the device closes");
-    check(gamepad.submit(state).code() == vigem::ErrorCode::device_closed,
+    check(gamepad.submit(state).code() == padbus::ErrorCode::device_closed,
           "a submit after close reports device_closed");
-    check(gamepad.reattach().code() == vigem::ErrorCode::device_closed,
+    check(gamepad.reattach().code() == padbus::ErrorCode::device_closed,
           "reattaching a closed device reports device_closed");
     check(!gamepad.is_attached(), "a closed device reports itself detached");
   }
 
   void test_mapping_persistence() {
-    vigem::GamepadMapping mapping;
+    padbus::GamepadMapping mapping;
     mapping.left_stick.deadzone = 0.25F;
     mapping.left_stick.center_x = 0.05F;
     mapping.left_stick.per_axis_deadzone = true;
@@ -556,12 +556,12 @@ namespace {
     mapping.dpad_from_left_stick.enabled = true;
     mapping.dpad_from_left_stick.threshold = 0.7F;
     mapping.dpad_from_left_stick.suppress_stick = true;
-    mapping.buttons.push_back({vigem::GamepadButton::a, vigem::GamepadButton::b, true});
-    mapping.buttons.push_back({vigem::GamepadButton::x, vigem::GamepadButton::x, false});
+    mapping.buttons.push_back({padbus::GamepadButton::a, padbus::GamepadButton::b, true});
+    mapping.buttons.push_back({padbus::GamepadButton::x, padbus::GamepadButton::x, false});
 
-    const auto text = vigem::serialize(mapping);
+    const auto text = padbus::serialize(mapping);
     std::string error;
-    const auto parsed = vigem::deserialize(text, &error);
+    const auto parsed = padbus::deserialize(text, &error);
     check(parsed.has_value(), "a serialized mapping parses back");
     if (parsed) {
       check(std::fabs(parsed->left_stick.deadzone - 0.25F) < 1e-5F, "the deadzone round-trips");
@@ -572,24 +572,24 @@ namespace {
       check(parsed->dpad_from_left_stick.suppress_stick, "the dpad suppression round-trips");
       check_eq(parsed->buttons.size(), 2, "button entries round-trip");
       if (parsed->buttons.size() == 2) {
-        check(parsed->buttons[0].source == vigem::GamepadButton::a &&
-                  parsed->buttons[0].target == vigem::GamepadButton::b,
+        check(parsed->buttons[0].source == padbus::GamepadButton::a &&
+                  parsed->buttons[0].target == padbus::GamepadButton::b,
               "a button redirect round-trips");
         check(!parsed->buttons[1].enabled, "a button suppression round-trips");
       }
     }
 
-    check(!vigem::deserialize("not a mapping").has_value(), "invalid mapping text is rejected");
+    check(!padbus::deserialize("not a mapping").has_value(), "invalid mapping text is rejected");
 
     // The adapter applies an installed mapping before packing.
-    auto runtime = vigem::Runtime::create(fake_options());
-    auto adapter = vigem::GamepadStateAdapter::create(*runtime, vigem::profiles::xbox_360());
+    auto runtime = padbus::Runtime::create(fake_options());
+    auto adapter = padbus::GamepadStateAdapter::create(*runtime, padbus::profiles::xbox_360());
     if (!adapter) {
       check(false, "the adapter is created");
       return;
     }
 
-    vigem::GamepadMapping invert;
+    padbus::GamepadMapping invert;
     invert.left_stick.invert_y = true;
     adapter.adapter->set_mapping(invert);
     check(adapter.adapter->mapping().has_value(), "the adapter stores the mapping");
@@ -604,31 +604,31 @@ namespace {
 
   void test_status_and_logging() {
     std::vector<std::string> messages;
-    vigem::RuntimeOptions options = fake_options();
-    options.log_callback = [&messages](vigem::LogLevel level, const std::string &message) {
-      messages.push_back(std::string(vigem::to_string(level)) + ": " + message);
+    padbus::RuntimeOptions options = fake_options();
+    options.log_callback = [&messages](padbus::LogLevel level, const std::string &message) {
+      messages.push_back(std::string(padbus::to_string(level)) + ": " + message);
     };
 
-    auto runtime = vigem::Runtime::create(options);
+    auto runtime = padbus::Runtime::create(options);
     check(!messages.empty(), "runtime writes a log message");
     check(!runtime->capabilities().backend_name.empty(), "backend reports a name");
 
     // A throwing log callback must not escape into the API, and it is disabled after
     // its first failure so it cannot interrupt later operations.
     int log_throws = 0;
-    vigem::RuntimeOptions throwing_options = fake_options();
-    throwing_options.log_callback = [&log_throws](vigem::LogLevel, const std::string &) {
+    padbus::RuntimeOptions throwing_options = fake_options();
+    throwing_options.log_callback = [&log_throws](padbus::LogLevel, const std::string &) {
       ++log_throws;
       throw std::runtime_error("log boom");
     };
-    auto throwing_runtime = vigem::Runtime::create(throwing_options);
+    auto throwing_runtime = padbus::Runtime::create(throwing_options);
     check(throwing_runtime != nullptr, "runtime survives a throwing log callback");
     check_eq(log_throws, 1, "throwing log callback is disabled after it throws");
-    (void)throwing_runtime->create_gamepad(vigem::profiles::xbox_360());
+    (void)throwing_runtime->create_gamepad(padbus::profiles::xbox_360());
     check_eq(log_throws, 1, "disabled log callback is not invoked again");
-    check_eq(static_cast<int>(vigem::OperationStatus::failure(vigem::ErrorCode::no_free_slot, "x").code()),
-             static_cast<int>(vigem::ErrorCode::no_free_slot), "failure status keeps its code");
-    check(std::string(vigem::to_string(vigem::ErrorCode::device_closed)) == "device_closed", "error names are stable");
+    check_eq(static_cast<int>(padbus::OperationStatus::failure(padbus::ErrorCode::no_free_slot, "x").code()),
+             static_cast<int>(padbus::ErrorCode::no_free_slot), "failure status keeps its code");
+    check(std::string(padbus::to_string(padbus::ErrorCode::device_closed)) == "device_closed", "error names are stable");
   }
 
 }  // namespace

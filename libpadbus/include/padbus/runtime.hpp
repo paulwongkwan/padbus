@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/include/vigem/runtime.hpp
+ * @file libpadbus/include/padbus/runtime.hpp
  * @brief Runtime and virtual gamepad handle declarations.
  */
 #pragma once
@@ -14,9 +14,9 @@
 #include <vector>
 
 // local includes
-#include <vigem/types.hpp>
+#include <padbus/types.hpp>
 
-namespace vigem {
+namespace padbus {
 
   class Runtime;
 
@@ -29,7 +29,7 @@ namespace vigem {
      */
     struct RuntimeConstructionToken {
     private:
-      friend class ::vigem::Runtime;
+      friend class ::padbus::Runtime;
       friend class RuntimeState;
 
       RuntimeConstructionToken() = default;
@@ -388,4 +388,4 @@ namespace vigem {
     std::shared_ptr<detail::RuntimeState> state_;
   };
 
-}  // namespace vigem
+}  // namespace padbus

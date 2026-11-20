@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2016-2020, Nefarius Software Solutions e.U.
 /**
- * @file libvigem/src/mapping.cpp
+ * @file libpadbus/src/mapping.cpp
  * @brief Input shaping and remapping between physical controllers and emulated pads.
  */
-#include <vigem/mapping.hpp>
+#include <padbus/mapping.hpp>
 
 // standard includes
 #include <algorithm>
@@ -14,7 +14,7 @@
 #include <sstream>
 #include <utility>
 
-namespace vigem {
+namespace padbus {
 
   namespace {
 
@@ -237,7 +237,7 @@ namespace vigem {
   std::string serialize(const GamepadMapping &mapping) {
     std::ostringstream out;
     out << std::setprecision(9);
-    out << "vigem.mapping=1\n";
+    out << "padbus.mapping=1\n";
 
     const auto write_stick = [&out](const char *prefix, const StickMapping &stick) {
       out << prefix << ".center_x=" << stick.center_x << '\n';
@@ -305,7 +305,9 @@ namespace vigem {
 
       const auto key = line.substr(0, separator);
       const auto value = line.substr(separator + 1);
-      if (key == "vigem.mapping") {
+      // "vigem.mapping" is the header libvigem 1.0.0 wrote. Keep accepting it so
+      // mapping files saved before the rename still load.
+      if (key == "padbus.mapping" || key == "vigem.mapping") {
         continue;
       }
 
@@ -436,4 +438,4 @@ namespace vigem {
     return mapping;
   }
 
-}  // namespace vigem
+}  // namespace padbus

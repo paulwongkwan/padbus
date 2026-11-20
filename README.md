@@ -1,20 +1,39 @@
-# ViGEm Bus Driver
+# PadBus
 
-Windows kernel-mode driver emulating well-known USB game controllers.
-
-[![Build status](https://ci.appveyor.com/api/projects/status/rv74ufluwib52dq2?svg=true)](https://ci.appveyor.com/project/nefarius/vigembus) [![GitHub All Releases](https://img.shields.io/github/downloads/ViGEm/ViGEmBus/total)](https://somsubhra.github.io/github-release-stats/?username=nefarius&repository=ViGEmBus) [![Discord](https://img.shields.io/discord/346756263763378176.svg)](https://discord.nefarius.at) [![Website](https://img.shields.io/website-up-down-green-red/https/vigem.org.svg?label=docs.nefarius.at)](https://docs.nefarius.at/) [![GitHub followers](https://img.shields.io/github/followers/nefarius.svg?style=social&label=Follow)](https://github.com/nefarius) [![Mastodon Follow](https://img.shields.io/mastodon/follow/109321120351128938?domain=https%3A%2F%2Ffosstodon.org%2F&style=social)](https://fosstodon.org/@Nefarius)
+Windows 11 kernel-mode bus driver publishing virtual Xbox 360 and DualShock 4 controllers.
 
 ---
 
-## 🧟 THIS PROJECT HAS BEEN RETIRED 🧟
+## Lineage
 
-Users of this software are encouraged to [read the end-of-life statement](https://docs.nefarius.at/projects/ViGEm/End-of-Life/). So long, cheers 🖖
+`PadBus` continues the retired [ViGEmBus](https://github.com/nefarius/ViGEmBus) driver. Upstream
+ended in November 2023 after a trademark conflict, not for a technical reason, so this fork keeps
+the code, the BSD-3-Clause licence and the driver identity that existing hosts depend on, and drops
+the name that caused the conflict. It targets Windows 11 only.
+
+## Name and compatibility
+
+Everything a user sees is PadBus: the repository, the product, the installer, the C++ library
+(`libpadbus`, namespace `padbus`) and the Device Manager description. These keep their ViGEm
+identities on purpose, because Sunshine, DS4Windows and every other ViGEmClient host match on them:
+
+- the `Nefarius\ViGEmBus\Gen1` hardware ID and the device interface GUID the bus publishes,
+- the `ViGEmBus` service name and the `ViGEmBus.sys` / `ViGEmBus.inf` / `ViGEmBus.cat` package files,
+- the `ViGEmClient.dll` C API the driver is driven through.
+
+An existing ViGEmBus installation therefore keeps working, and `libpadbus` drives it unchanged.
 
 ---
 
 ## About
 
-The `ViGEmBus` driver and `ViGEmClient` libraries represent the core of the Virtual Gamepad Emulation Framework (or `ViGEm` , for short). `ViGEm` aims for a 100% accurate [emulation](<https://en.wikipedia.org/wiki/Emulator>) of well-known gaming peripherals as pure software-based devices at kernel level. As it mimics "the real thing" games and other processes require no additional modification whatsoever to detect `ViGEm`-based devices (no Proxy-DLLs or API-Hooking) and simply work out of the box. While the (now obsolete) [Scarlett.Crush Productions Virtual Bus Driver](<https://github.com/nefarius/ScpVBus>) is the spiritual father of this project, `ViGEm` has been designed and written from the ground up utilizing Microsoft's [Kernel-Mode Driver Framework](https://en.wikipedia.org/wiki/Kernel-Mode_Driver_Framework).
+`PadBus` publishes virtual Xbox 360 and DualShock 4 controllers as real devices on Windows 11. Games
+and other processes need no modification to see them — no proxy DLLs, no API hooking — because the
+driver presents the same kernel-level interfaces the hardware does: XInput for the Xbox 360 pad and
+HID for the DualShock 4. Like its predecessor it is built on Microsoft's
+[Kernel-Mode Driver Framework](<https://en.wikipedia.org/wiki/Kernel-Mode_Driver_Framework>), and it
+traces its lineage to the (now obsolete)
+[Scarlett.Crush Productions Virtual Bus Driver](<https://github.com/nefarius/ScpVBus>).
 
 ### Emulated devices
 
@@ -36,29 +55,29 @@ A few examples of the most common use cases for `ViGEm` are:
 
 ## Modern C++ client API
 
-The `libvigem/` library adds a modern C++17 client API to the bus driver. It is modelled on
+The `libpadbus/` library adds a modern C++17 client API to the bus driver. It is modelled on
 [`libvirtualhid`](https://github.com/LizardByte/libvirtualhid): consumers describe what they want in
 portable terms — a runtime, a device profile, a normalized gamepad state, output callbacks — and the
 library translates that into the personalities the driver actually publishes.
 
 ```cpp
-#include <vigem/vigem.hpp>
+#include <padbus/padbus.hpp>
 
-auto runtime = vigem::Runtime::create();
-auto created = runtime->create_gamepad(vigem::profiles::xbox_360());
+auto runtime = padbus::Runtime::create();
+auto created = runtime->create_gamepad(padbus::profiles::xbox_360());
 if (!created) {
   return;
 }
 
 auto &gamepad = *created.gamepad;
-gamepad.set_output_callback([](const vigem::GamepadOutput &output) {
-  if (output.kind == vigem::GamepadOutputKind::rumble) {
+gamepad.set_output_callback([](const padbus::GamepadOutput &output) {
+  if (output.kind == padbus::GamepadOutputKind::rumble) {
     // Forward feedback to the client controller.
   }
 });
 
-vigem::GamepadState state;
-state.buttons.set(vigem::GamepadButton::a, true);
+padbus::GamepadState state;
+state.buttons.set(padbus::GamepadButton::a, true);
 state.left_stick = {0.25F, -0.5F};
 state.right_trigger = 1.0F;
 gamepad.submit(state);
@@ -66,23 +85,23 @@ gamepad.submit(state);
 
 Features adopted from `libvirtualhid`:
 
-- **Runtime and profile model** — `vigem::Runtime::create()` plus `vigem::profiles::xbox_360()` and
-  `vigem::profiles::dualshock4()` replace the manual alloc/connect/add sequence, and profiles carry
+- **Runtime and profile model** — `padbus::Runtime::create()` plus `padbus::profiles::xbox_360()` and
+  `padbus::profiles::dualshock4()` replace the manual alloc/connect/add sequence, and profiles carry
   their own vendor/product identity and capability flags.
 - **Normalized gamepad state** — sticks use `[-1.0, 1.0]`, triggers use `[0.0, 1.0]`, buttons use the
-  logical `vigem::GamepadButton` set. The library clamps out-of-range input and packs the profile
+  logical `padbus::GamepadButton` set. The library clamps out-of-range input and packs the profile
   specific report, so callers never build `XUSB_REPORT` or `DS4_REPORT_EX` by hand.
 - **Unified output callbacks** — rumble, lightbar color, and player LED feedback from both profiles
-  arrive through a single `vigem::GamepadOutput` callback instead of two driver-specific ones.
+  arrive through a single `padbus::GamepadOutput` callback instead of two driver-specific ones.
 - **Capability queries** — `gamepad_profile_support()`, `supports_gamepad_button()`,
   `supports_gamepad_output()`, and `Runtime::capabilities()` let hosts hide inputs a profile cannot carry.
-- **Status model** — `vigem::OperationStatus` and `vigem::ErrorCode` replace raw `VIGEM_ERROR` values and
+- **Status model** — `padbus::OperationStatus` and `padbus::ErrorCode` replace raw `VIGEM_ERROR` values and
   carry a human-readable reason.
-- **Incremental adapter** — `vigem::GamepadStateAdapter` caches the full state and resubmits it after
+- **Incremental adapter** — `padbus::GamepadStateAdapter` caches the full state and resubmits it after
   partial updates such as `set_button()` or `set_touchpad_contact()`.
 - **Diagnostics hook** — `RuntimeOptions::log_callback` routes runtime and device lifecycle messages into
   the host's logging system.
-- **In-memory backend** — `vigem::BackendKind::fake` creates devices without the driver, for tests and
+- **In-memory backend** — `padbus::BackendKind::fake` creates devices without the driver, for tests and
   API validation.
 - **Full DualShock 4 reports** — touch contacts, gyroscope, and accelerometer samples are packed into the
   full `DS4_REPORT_EX` report, and raw output reports are available through `Gamepad::poll_raw_output()`.
@@ -91,11 +110,11 @@ Features adopted from `libvirtualhid`:
   publishes charge and cable state in both battery bytes ViGEm exposes.
 - **Attachment queries** — `Gamepad::is_attached()` reports whether the driver still holds the target, so a
   bus restart is detectable instead of surfacing as an endless run of failed submits.
-- **Input mapping** — `vigem::GamepadMapping` shapes a physical controller's state before submission: radial
+- **Input mapping** — `padbus::GamepadMapping` shapes a physical controller's state before submission: radial
   or per-axis deadzone, centre offset for sticks that rest off-centre, anti-deadzone floor, saturation,
   response curve, axis inversion, trigger zones, stick-to-D-pad synthesis, and button redirection or
-  suppression, matching what DS4Windows and x360ce expose per axis. `vigem::serialize()` and
-  `vigem::deserialize()` store a mapping as stable `key=value` text for per-controller profile files.
+  suppression, matching what DS4Windows and x360ce expose per axis. `padbus::serialize()` and
+  `padbus::deserialize()` store a mapping as stable `key=value` text for per-controller profile files.
 - **Recovery and duplicate suppression** — `Gamepad::reattach()` revives a device the driver dropped (a bus
   restart invalidates both the target and the client connection), and `set_submit_on_change()` drops frames
   that repeat the previous report while a keepalive flush keeps the device from going stale. Failures carry
@@ -103,11 +122,11 @@ Features adopted from `libvirtualhid`:
 
 ### Migrating from the ViGEmClient C API
 
-| ViGEmClient | libvigem |
+| ViGEmClient C API | PadBus C++ API |
 | --- | --- |
-| `vigem_alloc` + `vigem_connect` | `vigem::Runtime::create()` |
-| `vigem_target_x360_alloc` / `_ds4_alloc` + `vigem_target_add` | `Runtime::create_gamepad(vigem::profiles::xbox_360())` / `dualshock4()` |
-| `vigem_target_x360_update` / `vigem_target_ds4_update_ex` | `Gamepad::submit(vigem::GamepadState{…})` |
+| `vigem_alloc` + `vigem_connect` | `padbus::Runtime::create()` |
+| `vigem_target_x360_alloc` / `_ds4_alloc` + `vigem_target_add` | `Runtime::create_gamepad(padbus::profiles::xbox_360())` / `dualshock4()` |
+| `vigem_target_x360_update` / `vigem_target_ds4_update_ex` | `Gamepad::submit(padbus::GamepadState{…})` |
 | `vigem_target_is_attached` | `Gamepad::is_attached()`, then `Gamepad::reattach()` |
 | `vigem_target_remove` + `vigem_target_free` | `Gamepad::close()`, or handle destruction |
 | `vigem_target_x360_register_notification` / `_ds4_` | `Gamepad::set_output_callback(…)` |
@@ -115,8 +134,8 @@ Features adopted from `libvirtualhid`:
 | `vigem_target_x360_get_user_index` | `Gamepad::xinput_user_index()` |
 | `vigem_disconnect` + `vigem_free` | runtime destruction |
 
-Consume the library with `add_subdirectory(ViGEmBus)` and link `vigem::vigem`, or install it and use
-`find_package(vigem REQUIRED)`. The headers are C++17 and compile unchanged as C++23.
+Consume the library with `add_subdirectory(padbus)` and link `padbus::padbus`, or install it and use
+`find_package(padbus REQUIRED)`. The headers are C++17 and compile unchanged as C++23.
 
 ### DualShock 4 report layout
 
@@ -142,7 +161,7 @@ Consume the library with `add_subdirectory(ViGEmBus)` and link `vigem::vigem`, o
 cmake -S . -B out -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build out
 ctest --test-dir out --output-on-failure
-cmake --install out --prefix dist/libvigem-1.0.0
+cmake --install out --prefix dist/libpadbus-1.0.0
 cmake --build out --target package      # portable archive via CPack
 ```
 
@@ -150,16 +169,16 @@ Three checks run under CTest:
 
 | Target | What it covers |
 | --- | --- |
-| `vigem_api_smoke` | report packing for both profiles, error paths, logging, mapping and the adapter |
-| `vigem_sunshine_host` | the call sequence a Sunshine-style host performs, built as C++23 |
-| `vigem_stress` | submissions racing a close and feedback dispatch on four threads |
+| `padbus_api_smoke` | report packing for both profiles, error paths, logging, mapping and the adapter |
+| `padbus_sunshine_host` | the call sequence a Sunshine-style host performs, built as C++23 |
+| `padbus_stress` | submissions racing a close and feedback dispatch on four threads |
 
-Set `VIGEM_REQUIRE_DRIVER=1` before running `vigem_sunshine_host` to make a machine without the
+Set `PADBUS_REQUIRE_DRIVER=1` before running `padbus_sunshine_host` to make a machine without the
 bus driver fail instead of skipping the live pass.
 
 ### Versioning
 
-`vigem::Runtime::version()` reports the library version, and the CMake package and CPack archive
+`padbus::Runtime::version()` reports the library version, and the CMake package and CPack archive
 carry the same number. Headers keep a stable layout within a minor series, behaviour is additive
 across minor releases, and incompatibilities only arrive with a major bump.
 
@@ -196,15 +215,15 @@ The ViGEm Bus Driver is licensed under the **BSD-3-Clause**, see [LICENSE](./LIC
 
 You can build directly within Visual Studio.
 
-The modern C++ client API in `libvigem/` targets **Windows 11** and needs a C++17 compiler:
+The modern C++ client API in `libpadbus/` targets **Windows 11** and needs a C++17 compiler:
 
 ```sh
-cmake -S . -B out -DVIGEM_BUILD_TESTS=ON
+cmake -S . -B out -DPADBUS_BUILD_TESTS=ON
 cmake --build out --config Release
 ctest --test-dir out -C Release --output-on-failure
 ```
 
-The Windows backend loads `ViGEmClient.dll` at runtime, so `libvigem` has no link-time dependency on the
+The Windows backend loads `ViGEmClient.dll` at runtime, so `libpadbus` has no link-time dependency on the
 client SDK and reports `backend_unavailable` when the driver or library is missing.
 
 Do bear in mind that you'll need to **sign** the driver to use it without [test mode](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option#enable-or-disable-use-of-test-signed-code).
