@@ -1,0 +1,5 @@
+// Resources for the unsigned developer installer.
+// Files are resolved relative to this .rc, which sits next to the payload.
+101 RCDATA "PadBus.sys"
+102 RCDATA "PadBus.inf"
+103 RCDATA "PadBus.cat"
