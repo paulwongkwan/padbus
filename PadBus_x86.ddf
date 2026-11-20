@@ -9,10 +9,10 @@
 .Set CompressionType=MSZIP
 .Set Cabinet=on
 .Set Compress=on
-; ARM64
-.Set CabinetNameTemplate=ViGEmBus_ARM64.cab
-.Set DestinationDir=ViGEmBus_ARM64
+; x86
+.Set CabinetNameTemplate=PadBus_x86.cab
+.Set DestinationDir=PadBus_x86
 LICENSE
-bin\ARM64\ViGEmBus.pdb
-bin\ARM64\ViGEmBus\ViGEmBus.inf
-bin\ARM64\ViGEmBus\ViGEmBus.sys
+bin\x86\ViGEmBus.pdb
+bin\x86\PadBus\PadBus.inf
+bin\x86\PadBus\PadBus.sys

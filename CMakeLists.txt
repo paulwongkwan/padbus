@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(PadBus LANGUAGES CXX)
 
 # The kernel-mode driver and the legacy C client are built with MSBuild through
-# ViGEmBus.sln. This CMake project builds the modern C++ client API in libpadbus.
+# PadBus.sln. This CMake project builds the modern C++ client API in libpadbus.
 
 # libpadbus drives ViGEmBus through the Windows client library and targets Windows 11.
 if(NOT WIN32)

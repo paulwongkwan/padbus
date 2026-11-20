@@ -18,7 +18,8 @@ Everything a user sees is PadBus: the repository, the product, the installer, th
 identities on purpose, because Sunshine, DS4Windows and every other ViGEmClient host match on them:
 
 - the `Nefarius\ViGEmBus\Gen1` hardware ID and the device interface GUID the bus publishes,
-- the `ViGEmBus` service name and the `ViGEmBus.sys` / `ViGEmBus.inf` / `ViGEmBus.cat` package files,
+- the `ViGEmBus` service name, which the driver package no longer shares: it ships as
+  `PadBus.sys`, `PadBus.inf` and `PadBus.cat`,
 - the `ViGEmClient.dll` C API the driver is driven through.
 
 An existing ViGEmBus installation therefore keeps working, and `libpadbus` drives it unchanged.

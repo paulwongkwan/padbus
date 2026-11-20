@@ -36,7 +36,7 @@ BEGIN
 		VALUE "FileVersion",      "1.16.200.0"
 		VALUE "InternalName",     "PadBus Virtual Gamepad Bus Driver"
 		VALUE "LegalCopyright",   "(C) 2016-2022 Nefarius Software Solutions e.U."
-		VALUE "OriginalFilename", "ViGEmBus.sys"
+		VALUE "OriginalFilename", "PadBus.sys"
 		VALUE "ProductName",      "PadBus Virtual Gamepad Bus Driver"
 		VALUE "ProductVersion",	  "1.16.200.0"
         END

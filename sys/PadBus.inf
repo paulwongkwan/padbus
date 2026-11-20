@@ -36,7 +36,7 @@ Signature="$WINDOWS NT$"
 Class=System
 ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
 Provider=%ManufacturerName%
-CatalogFile=ViGEmBus.cat
+CatalogFile=PadBus.cat
 DriverVer= ;
 PnpLockdown=1
 
@@ -48,7 +48,7 @@ ViGEmBus_Device_CoInstaller_CopyFiles = 11
 1 = %DiskName%,,,
 
 [SourceDisksFiles]
-ViGEmBus.sys = 1,,
+PadBus.sys = 1,,
 WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll = 1
 
 ;*****************************************
@@ -71,7 +71,7 @@ WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll = 1
 CopyFiles=Drivers_Dir
 
 [Drivers_Dir]
-ViGEmBus.sys
+PadBus.sys
 
 ;-------------- Service installation
 [ViGEmBus_Device.NT.Services]
@@ -83,7 +83,7 @@ DisplayName    = %ViGEmBus.SVCDESC%
 ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
 StartType      = 1               ; SERVICE_SYSTEM_START
 ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
-ServiceBinary  = %12%\ViGEmBus.sys
+ServiceBinary  = %12%\PadBus.sys
 
 ;
 ;--- ViGEmBus_Device Coinstaller installation ------
